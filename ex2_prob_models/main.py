@@ -30,12 +30,12 @@ class LidstoneSmoothingModel:
                 self.count_events + (self.lambda_param * V))  # TODO: Check this - Why V?
 
     def perplexity(self, val_unique_events: Counter) -> float:  # TODO: Something is wrong here.
-        sum_of_probs = 0.0
+        sum_of_log_probs = 0.0
         for event in val_unique_events.keys():
-            sum_of_probs += math.log(self.calc_lidstone_prob(event))
+            sum_of_log_probs += math.log(self.calc_lidstone_prob(event), 2.0) * val_unique_events.get(event)
 
-        count_unique_events = len(val_unique_events.keys())
-        value = -1 * (1 / count_unique_events) * sum_of_probs
+        count_val_unique_events = sum(val_unique_events.values())
+        value = -1 * (1 / count_val_unique_events) * sum_of_log_probs
 
         return math.pow(2, value)
 
