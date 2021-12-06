@@ -136,8 +136,7 @@ class HeldoutSmoothingModel(BaseModel):
     def test_probabilities_sum_to_1(self):
         # Sum probabilities of seen events
         sum_of_probs = 0.0
-        import tqdm
-        for word in tqdm.tqdm(self.T_unique_events.keys()):
+        for word in self.T_unique_events.keys():
             sum_of_probs += self.calc_heldout_prob(word)
 
         # Add probabilities for unseen events
