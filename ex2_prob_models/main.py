@@ -1,5 +1,6 @@
 import math
 import sys
+from abc import abstractmethod, ABC
 from collections import defaultdict, Counter
 
 """"""""""""""""""""""""""""""""""""""
@@ -17,27 +18,107 @@ INPUT_WORD = sys.argv[3]
 output_filename = sys.argv[4]
 
 
-class LidstoneSmoothingModel:
+class BaseModel(ABC):
+    """
+    Abstract model class
+    """
+
+    def perplexity(self, val_unique_events: Counter) -> float:
+        sum_of_log_probs = 0.0
+        for event in val_unique_events.keys():
+            sum_of_log_probs += math.log(self.calc_prob(event), 2.0) * val_unique_events.get(event)
+
+        count_val_unique_events = sum(val_unique_events.values())
+        value = -1 * (1 / count_val_unique_events) * sum_of_log_probs
+
+        return math.pow(2, value)
+
+    @abstractmethod
+    def calc_prob(self, input_word: str) -> float:
+        raise NotImplementedError("BaseModel should not be used directly")
+
+
+class LidstoneSmoothingModel(BaseModel):
 
     def __init__(self, lambda_param: float, count_events: int, unique_events: Counter):
         self.unique_events = unique_events
         self.count_events = count_events
         self.lambda_param = lambda_param
 
-    def calc_lidstone_prob(self, input_word: str) -> float:  # Working!
+    def calc_prob(self, input_word: str) -> float:
+        return self.calc_lidstone_prob(input_word)
+
+    def calc_lidstone_prob(self, input_word: str) -> float:
         # Returning the lidstone probability of the input word.
         return (self.unique_events.get(input_word, 0.0) + self.lambda_param) / (
                 self.count_events + (self.lambda_param * V))  # TODO: Check this - Why V?
 
-    def perplexity(self, val_unique_events: Counter) -> float:  # TODO: Something is wrong here.
-        sum_of_log_probs = 0.0
-        for event in val_unique_events.keys():
-            sum_of_log_probs += math.log(self.calc_lidstone_prob(event), 2.0) * val_unique_events.get(event)
 
-        count_val_unique_events = sum(val_unique_events.values())
-        value = -1 * (1 / count_val_unique_events) * sum_of_log_probs
+class HeldoutSmoothingModel(BaseModel):
 
-        return math.pow(2, value)
+    def __init__(self, T_unique_events: Counter, H_unique_events: Counter):
+        new_T_unique_events = self.add_events_to_T_based_on_H(T_unique_events, H_unique_events)
+        self.T_unique_events = new_T_unique_events
+        self.T_inversed_counter = self.inverse_counter(new_T_unique_events)
+        self.H_unique_events = H_unique_events
+
+    @staticmethod
+    def add_events_to_T_based_on_H(T_unique_events: Counter, H_unique_events: Counter) -> Counter:
+        """
+        For heldout we need to easily find events in H that are not in T, so we add these events to the T counter as 0.0
+        """
+
+        # Create a copy to avoid changing a variable received by reference
+        new_T_unique_events = T_unique_events.copy()
+
+        # Find events in H and not in T
+        events_in_H_not_in_T = [event for event in H_unique_events.keys() if event not in new_T_unique_events]
+
+        # Add these events to T with count 0.0
+        for event_in_H_not_in_T in events_in_H_not_in_T:
+            new_T_unique_events[event_in_H_not_in_T] = 0.0
+
+        return new_T_unique_events
+
+    @staticmethod
+    def inverse_counter(counter: Counter) -> dict:
+        """
+        Inverses a counter. For example, {"a": 5, "b": 5, "c": 6} will turn to {5: ["a", "b"], 6: ["c"]}
+        """
+
+        inversed_counter = defaultdict(list)
+        for event, count in counter.items():
+            inversed_counter[count].append(event)
+        return inversed_counter
+
+    def calc_prob(self, input_word: str) -> float:
+        return self.calc_heldout_prob(input_word)
+
+    def calc_heldout_prob(self, input_word: str) -> float:
+        """
+        Return the heldout probability of the input word.
+        """
+
+        # Calc how many times the input_word shows up in T
+        word_count = self.T_unique_events.get(input_word, 0.0)
+
+        # Calc the sum of the frequencies of all words in H that show exactly {word_count} times in T
+        t_r = sum([self.H_unique_events.get(word, 0.0) for word in self.T_inversed_counter.get(word_count, [])])
+
+        if word_count != 0.0:
+            # Calc the number of words that show {word_count} times in T
+            N_r = len(self.T_inversed_counter.get(word_count, []))
+        else:
+            # Words that show in T are words with count > 0
+            words_that_show_in_T = [key for key, value in self.T_unique_events.items() if value > 0]
+
+            # Calc the number of words that don't show in T (because word_count is 0)
+            N_r = V - len(words_that_show_in_T)
+
+        # Calc the size of H
+        H_size = sum(self.H_unique_events.values())
+
+        return t_r / (N_r * H_size)
 
 
 def find_best_lambda_param(train_count_events: int, train_unique_events: Counter, val_unique_events: Counter):
@@ -93,6 +174,8 @@ if __name__ == '__main__':
 
         # Writing the total number of events in the development set |S| to the output file.
         f.write(f'#Output7\t{len(S)}\n')
+
+        ## Lidstone model training
 
         # Splitting the development set into a training set with exactly the first 90% of the words in S and a
         # validation set with the rest 10% of the words.
@@ -152,3 +235,23 @@ if __name__ == '__main__':
         f.write(f'#Output19\t{best_lambda_param}\n')
         # Writing the minimized perplexity on the validation set using the best value of λ to the output file.
         f.write(f'#Output20\t{best_lambda_perplexity}\n')
+
+        ## Held out model training
+
+        # Splitting the development set into a training set to two halves.
+        cutoff = round(0.5 * len(S))
+        heldout_training_set = S[:cutoff]
+        heldout_val_set = S[cutoff:]
+
+        # Writing the number of events in the validation set to the output file.
+        f.write(f'#Output21\t{len(heldout_val_set)}\n')
+        # Writing the number of events in the training set to the output file.
+        f.write(f'#Output22\t{len(heldout_training_set)}\n')
+
+        # Defining new instances of the HeldoutSmoothingModel according to the lambda values.
+        heldout_model = HeldoutSmoothingModel(Counter(heldout_training_set), Counter(heldout_val_set))
+
+        # Writing P(Event = INPUT WORD) as estimated by heldout_model model to the output file.
+        f.write(f'#Output23\t{heldout_model.calc_heldout_prob(INPUT_WORD)}\n')
+        # Writing P(Event = ’unseen-word’) as estimated by heldout_model_1_00 model to the output file.
+        f.write(f'#Output24\t{heldout_model.calc_heldout_prob("unseen-word")}\n')
