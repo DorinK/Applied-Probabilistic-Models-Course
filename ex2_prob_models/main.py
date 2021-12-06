@@ -53,6 +53,18 @@ class LidstoneSmoothingModel(BaseModel):
         return (self.unique_events.get(input_word, 0.0) + self.lambda_param) / (
                 self.count_events + (self.lambda_param * V))  # TODO: Check this - Why V?
 
+    def test_probabilities_sum_to_1(self):
+        # Sum probabilities of seen events
+        sum_of_probs = 0.0
+        for word in self.unique_events.keys():
+            sum_of_probs += self.calc_lidstone_prob(word)
+
+        # Add probabilities for unseen events
+        num_of_unseen_events = V - len(self.unique_events)
+        sum_of_probs += num_of_unseen_events * self.calc_lidstone_prob("unseen-word")
+
+        print(f"sum_of_probs = {sum_of_probs} ; lambda = {self.lambda_param}")
+
 
 class HeldoutSmoothingModel(BaseModel):
 
@@ -120,6 +132,19 @@ class HeldoutSmoothingModel(BaseModel):
 
         # Heldout probability
         return t_r / (N_r * H_size)
+
+    def test_probabilities_sum_to_1(self):
+        # Sum probabilities of seen events
+        sum_of_probs = 0.0
+        import tqdm
+        for word in tqdm.tqdm(self.T_unique_events.keys()):
+            sum_of_probs += self.calc_heldout_prob(word)
+
+        # Add probabilities for unseen events
+        num_of_unseen_events = V - len(self.T_unique_events.keys())
+        sum_of_probs += num_of_unseen_events * self.calc_heldout_prob("unseen-word")
+
+        print(f"sum_of_probs = {sum_of_probs}")
 
 
 def find_best_lambda_param(train_count_events: int, train_unique_events: Counter, val_unique_events: Counter):
@@ -262,3 +287,11 @@ if __name__ == '__main__':
         f.write(f'#Output23\t{heldout_model.calc_heldout_prob(INPUT_WORD)}\n')
         # Writing P(Event = ’unseen-word’) as estimated by heldout_model model to the output file.
         f.write(f'#Output24\t{heldout_model.calc_heldout_prob("unseen-word")}\n')
+
+
+        ## Test probabilities sum to 1
+
+        lidstone_model_0_01.test_probabilities_sum_to_1()
+        lidstone_model_0_10.test_probabilities_sum_to_1()
+        lidstone_model_1_00.test_probabilities_sum_to_1()
+        heldout_model.test_probabilities_sum_to_1()
