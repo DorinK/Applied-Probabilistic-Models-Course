@@ -109,7 +109,7 @@ class HeldoutSmoothingModel(BaseModel):
             # Calc the number of words that show {word_count} times in T
             N_r = len(self.T_inversed_counter.get(word_count, []))
         else:
-            # Words that show in T are words with count > 0
+            # Calc the number of words that show in T (words with count > 0)
             words_that_show_in_T = [key for key, value in self.T_unique_events.items() if value > 0]
 
             # Calc the number of words that don't show in T (because word_count is 0)
@@ -118,17 +118,24 @@ class HeldoutSmoothingModel(BaseModel):
         # Calc the size of H
         H_size = sum(self.H_unique_events.values())
 
+        # Heldout probability
         return t_r / (N_r * H_size)
 
 
 def find_best_lambda_param(train_count_events: int, train_unique_events: Counter, val_unique_events: Counter):
     best_lambda = None
     best_lambda_perplexity = math.inf  # Fixed - replaced none with math.inf
+
+    # Iterate over a range of optional lambda values
     for lambda_param_int in range(0, 200, 1):
         lambda_param = lambda_param_int / 100
         if lambda_param == 0: continue  # Ignoring λ = 0, since log is not defined on 0 value.
+
+        # Calculate perplexity of a lidstone model
         model = LidstoneSmoothingModel(lambda_param, train_count_events, train_unique_events)
         curr_perplexity = model.perplexity(val_unique_events)
+
+        # Check if we found a better perplexity than before
         was_better_perplexity_found = curr_perplexity < best_lambda_perplexity
 
         if best_lambda is None or was_better_perplexity_found:
@@ -253,5 +260,5 @@ if __name__ == '__main__':
 
         # Writing P(Event = INPUT WORD) as estimated by heldout_model model to the output file.
         f.write(f'#Output23\t{heldout_model.calc_heldout_prob(INPUT_WORD)}\n')
-        # Writing P(Event = ’unseen-word’) as estimated by heldout_model_1_00 model to the output file.
+        # Writing P(Event = ’unseen-word’) as estimated by heldout_model model to the output file.
         f.write(f'#Output24\t{heldout_model.calc_heldout_prob("unseen-word")}\n')
