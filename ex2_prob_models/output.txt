@@ -1,0 +1,40 @@
+#Students	Dorin Keshales	Eran Hirsch	313298424	302620745
+#Output1	ex2_files/dataset/develop.txt
+#Output2	ex2_files/dataset/test.txt
+#Output3	honduras
+#Output4	output.txt
+#Output5	300000
+#Output6	3.3333333333333333e-06
+#Output7	415148
+#Output8	41515
+#Output9	373633
+#Output10	18976
+#Output11	3
+#Output12	8.029269363252175e-06
+#Output13	0.0
+#Output14	7.680244182215032e-06
+#Output15	2.477498123295172e-07
+#Output16	1442.5306025476225
+#Output17	1401.5433350551623
+#Output18	2067.106977825279
+#Output19	0.06
+#Output20	1390.8376714750948
+#Output21	207574
+#Output22	207574
+#Output23	7.574233252013611e-06
+#Output24	2.0540123717150817e-07
+#Output25	175980
+#Output26	1500.1407479050943
+#Output27	1610.1240952845353
+#Output28	L
+#Output29
+0	
+1	
+2	
+3	
+4	
+5	
+6	
+7	
+8	
+9	
