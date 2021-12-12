@@ -1,6 +1,6 @@
 #Students	Dorin Keshales	Eran Hirsch	313298424	302620745
-#Output1	/Users/eranh/OneDrive/Bar Ilan/89919 Probabilistic models/e2/ex2_files/dataset/develop.txt
-#Output2	/Users/eranh/OneDrive/Bar Ilan/89919 Probabilistic models/e2/ex2_files/dataset/test.txt
+#Output1	ex2_files/dataset/develop.txt
+#Output2	ex2_files/dataset/test.txt
 #Output3	honduras
 #Output4	output.txt
 #Output5	300000

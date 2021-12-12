@@ -18,6 +18,8 @@ output_filename = sys.argv[4]
 
 
 def find_best_lambda_param(train_count_events: int, train_unique_events: Counter, val_unique_events: Counter):
+
+    # Initialization
     best_lambda = None
     best_lambda_perplexity = math.inf
 
@@ -34,16 +36,17 @@ def find_best_lambda_param(train_count_events: int, train_unique_events: Counter
         # Checking if we found a better perplexity than before
         was_better_perplexity_found = curr_perplexity < best_lambda_perplexity
 
-        # If we did, update the best lambda and best perplexity values
+        # If we did, update the best λ and best perplexity values
         if best_lambda is None or was_better_perplexity_found:
             best_lambda = lambda_param
             best_lambda_perplexity = curr_perplexity
 
-    # Returning the best lambda value and the perplexity value calculated with the best lambda value
+    # Returning the best λ value and the perplexity value calculated with the best λ value
     return best_lambda, best_lambda_perplexity
 
 
 def read_file_and_pull_out_events(file_name: str, prefix: str) -> List[str]:
+
     # Opening the requested file
     with open(file_name, 'r', encoding='utf-8') as dev:
 
@@ -114,7 +117,7 @@ if __name__ == '__main__':
 
         # Writing the number of different events in the training set (i.e. observed vocabulary) to the output file
         f.write(f'#Output10\t{count_train_unique_events}\n')
-        # Writing the number of times the eval_setvent INPUT_WORD appears in the training set to the output file
+        # Writing the number of times the event INPUT_WORD appears in the training set to the output file
         f.write(f'#Output11\t{train_unique_events.get(INPUT_WORD, 0.0)}\n')
 
         # Writing P(Event = INPUT_WORD) the Maximum Likelihood Estimate (MLE) based on the training set
@@ -125,7 +128,7 @@ if __name__ == '__main__':
         # (i.e. no smoothing) to the output file
         f.write(f'#Output13\t{train_unique_events.get("unseen-word", 0.0) / len(training_set)}\n')
 
-        # Defining new instances of the LidstoneSmoothingModel according to the lambda values
+        # Defining new instances of the LidstoneSmoothingModel according to the λ values
         lidstone_model_0_01 = LidstoneSmoothingModel(0.01, len(training_set), train_unique_events)
         lidstone_model_0_10 = LidstoneSmoothingModel(0.1, len(training_set), train_unique_events)
         lidstone_model_1_00 = LidstoneSmoothingModel(1.0, len(training_set), train_unique_events)
@@ -155,7 +158,7 @@ if __name__ == '__main__':
         # Writing the minimized perplexity on the validation set using the best value of λ to the output file
         f.write(f'#Output20\t{best_lambda_perplexity}\n')
 
-        """"" Held out model training """""
+        """"" Held-out model training """""
 
         # Splitting the development set into a training set to two halves
         cutoff = round(0.5 * len(S))
@@ -175,8 +178,9 @@ if __name__ == '__main__':
         # Writing P(Event = ’unseen-word’) as estimated by the heldout_model model to the output file
         f.write(f'#Output24\t{heldout_model.calc_prob("unseen-word")}\n')
 
-        # """"" Test probabilities sum to 1 """""
-        #
+        """"" Test probabilities sum to 1 """""
+
+        # Sanity check
         # lidstone_model_0_01.test_probabilities_sum_to_1()
         # lidstone_model_0_10.test_probabilities_sum_to_1()
         # lidstone_model_1_00.test_probabilities_sum_to_1()
@@ -190,7 +194,7 @@ if __name__ == '__main__':
         # Writing the total number of events in the test set to the output file
         f.write(f'#Output25\t{len(test_set)}\n')
 
-        # Defining new instance of the LidstoneSmoothingModel according to the best lambda value found during development
+        # Defining new instance of the LidstoneSmoothingModel according to the best λ value found during development
         lidstone_model_best_lambda = LidstoneSmoothingModel(best_lambda_param, len(training_set), train_unique_events)
 
         # Using a Counter to get all the unique words (events) in the test set and the number of their occurrences
@@ -200,7 +204,7 @@ if __name__ == '__main__':
         lidstone_model_test_perplexity = lidstone_model_best_lambda.perplexity(test_unique_events)
         heldout_model_test_perplexity = heldout_model.perplexity(test_unique_events)
 
-        # Writing the perplexity on the test set, according to the Lidstone model with the best lambda, to the output file
+        # Writing the perplexity on the test set, according to the Lidstone model with the best λ, to the output file
         f.write(f'#Output26\t{lidstone_model_test_perplexity}\n')
         # Writing the perplexity on the test set, according to the held-out model, to the output file
         f.write(f'#Output27\t{heldout_model.perplexity(test_unique_events)}\n')
@@ -210,9 +214,14 @@ if __name__ == '__main__':
         letter_to_write = "L" if lidstone_model_test_perplexity < heldout_model_test_perplexity else "H"
         f.write(f'#Output28\t{letter_to_write}\n')
 
-        # Writing table comparing different r values
+        # Writing table comparing different r values to the output file
         f.write(f'#Output29\n')
+
         for r in range(10):
+            # Calculating the f_λ value - the expected frequency according to the estimated p(x) on the same corpus from
+            # which the original r was counted
             f_lambda = lidstone_model_best_lambda.calc_f_lambda(r)
+            # Calculating the f_H, N_r and tr values
             f_H, N_r, t_r = heldout_model.calc_values_for_output_29(r)
+            # Writing the results according to the current r value to the output file
             f.write(f'{r}\t{f_lambda}\t{f_H}\t{N_r}\t{t_r}\n')

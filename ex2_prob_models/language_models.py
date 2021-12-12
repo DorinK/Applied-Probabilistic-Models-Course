@@ -12,7 +12,7 @@ from typing import Tuple
 V = 300000
 
 
-class BaseModel(ABC):
+class BaseSmoothingModel(ABC):
     """
     Abstract model class
     """
@@ -31,6 +31,7 @@ class BaseModel(ABC):
         count_val_unique_events = sum(val_unique_events.values())
         value = -1 * (1 / count_val_unique_events) * sum_of_log_probs
 
+        # Returning the perplexity value
         return math.pow(2, value)
 
     @abstractmethod
@@ -38,7 +39,10 @@ class BaseModel(ABC):
         raise NotImplementedError("BaseModel should not be used directly")
 
 
-class LidstoneSmoothingModel(BaseModel):
+class LidstoneSmoothingModel(BaseSmoothingModel):
+    """
+    Lidstone smoothing model class
+    """
 
     def __init__(self, lambda_param: float, count_events: int, unique_events: Counter):
         self.unique_events = unique_events
@@ -54,12 +58,24 @@ class LidstoneSmoothingModel(BaseModel):
 
     def calc_prob_by_word_count(self, word_count: int) -> float:
         """
-        Returns the lidstone probability of the word_count (separated for output 29)
+        Returns the lidstone probability of the input word_count (separated for output 29)
         """
 
         return (word_count + self.lambda_param) / (self.count_events + (self.lambda_param * V))
 
+    def calc_f_lambda(self, r: int) -> float:
+        """
+        Returns the f_λ value required for output 29
+        """
+
+        # Calculating the lidstone probability of the word_count r
+        prob_by_word_count = self.calc_prob_by_word_count(r)
+
+        # Rounding the f_λ value to 5 digits after the decimal point
+        return round(prob_by_word_count * self.count_events, 5)
+
     def test_probabilities_sum_to_1(self):
+
         sum_of_probs = 0.0
 
         # Sum the probabilities of seen events
@@ -72,17 +88,11 @@ class LidstoneSmoothingModel(BaseModel):
 
         print(f"sum_of_probs = {sum_of_probs} ; lambda = {self.lambda_param}")
 
-    def calc_f_lambda(self, r: int) -> float:
-        """
-        Return the value f_lambda required for output 29
-        """
 
-        prob_by_word_count = self.calc_prob_by_word_count(r)
-
-        return round(prob_by_word_count * self.count_events, 5)
-
-
-class HeldoutSmoothingModel(BaseModel):
+class HeldoutSmoothingModel(BaseSmoothingModel):
+    """
+    Held-out smoothing model class
+    """
 
     def __init__(self, T_unique_events: Counter, H_unique_events: Counter):
         new_T_unique_events = self.add_events_to_T_based_on_H(T_unique_events, H_unique_events)
@@ -99,7 +109,7 @@ class HeldoutSmoothingModel(BaseModel):
         # Creating a copy to avoid changing a variable received by reference
         new_T_unique_events = T_unique_events.copy()
 
-        # Finding events in H and not in T
+        # Finding events in H that are not in T
         events_in_H_not_in_T = [event for event in H_unique_events.keys() if event not in new_T_unique_events]
 
         # Adding these events to T with count 0.0
@@ -114,38 +124,49 @@ class HeldoutSmoothingModel(BaseModel):
         Inverses a counter. For example, {"a": 5, "b": 5, "c": 6} will turn to {5: ["a", "b"], 6: ["c"]}
         """
 
-        inversed_counter = defaultdict(list)
+        inverted_counter = defaultdict(list)
+
+        # For each pair of event and count, make the count a key and the event a value of this key
         for event, count in counter.items():
-            inversed_counter[count].append(event)
-        return inversed_counter
+            inverted_counter[count].append(event)
+
+        # Returning the inverted counter
+        return inverted_counter
 
     def calc_prob(self, input_word: str) -> float:
         """
-        Return the held-out probability of the input_word
+        Returns the held-out probability of the input_word
         """
 
-        # Calculating how many times the INPUT_WORD shows up in T
+        # Calculating how many times the input_word shows up in T
         word_count = self.T_unique_events.get(input_word, 0.0)
 
+        # Calculating the t_r and N_r values
         t_r = self._calc_t_r(word_count)
         N_r = self._calc_N_r(word_count)
 
         # Calculating the size of H
         H_size = sum(self.H_unique_events.values())
 
-        # Held-out probability
+        # Returning the held-out probability
         return t_r / (N_r * H_size)
 
     def _calc_t_r(self, r: int) -> int:
         """
+        Returns the sum of the frequencies of all words in H that show exactly {r} times in T
         Returns the value of t_r
         """
 
-        # Calculating the sum of the frequencies of all words in H that show exactly {r} times in T
+        # Returning the value of t_r
         return sum([self.H_unique_events.get(word, 0.0) for word in self.T_inversed_counter.get(r, [])])
 
     def _calc_N_r(self, r: int) -> int:
-        if r != 0.0:
+        """
+        Returns the number of events of frequency r in the training half of the development set, which is used in the
+        held-out estimation
+        """
+
+        if r != 0:
             # Calculating the number of words that show {word_count} times in T
             N_r = len(self.T_inversed_counter.get(r, []))
         else:
@@ -155,21 +176,27 @@ class HeldoutSmoothingModel(BaseModel):
             # Calculating the number of words that don't show in T (because word_count is 0)
             N_r = V - len(words_that_show_in_T)
 
+        # Returning the value of N_r
         return N_r
 
     def calc_values_for_output_29(self, r: int) -> Tuple[float, int, int]:
         """
-        Return the values required for output 29
+        Returns the values required for output 29
         """
 
+        # Calculating the t_r and N_r values
         t_r = self._calc_t_r(r)
         N_r = self._calc_N_r(r)
 
+        # Calculating the expected frequency according to the estimated p(x) on the same corpus from which the original
+        # r was counted
         f_H = t_r / N_r
 
+        # Returning the values of f_H, N_r and t_r (rounding the result of f_H to 5 digits after the decimal point)
         return round(f_H, 5), N_r, int(t_r)
 
     def test_probabilities_sum_to_1(self):
+
         sum_of_probs = 0.0
 
         # Sum the probabilities of seen events
