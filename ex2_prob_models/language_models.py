@@ -1,6 +1,7 @@
 from abc import abstractmethod, ABC
 import math
 from collections import defaultdict, Counter
+from typing import Tuple
 
 """"""""""""""""""""""""""""""""""""""
 #     Dorin Keshales    313298424
@@ -16,8 +17,11 @@ class BaseModel(ABC):
     Abstract model class
     """
 
-    # Computing the perplexity value
     def perplexity(self, val_unique_events: Counter) -> float:
+        """
+        Computing the perplexity value
+        """
+
         sum_of_log_probs = 0.0
 
         # For every unique event in the validation set
@@ -41,27 +45,41 @@ class LidstoneSmoothingModel(BaseModel):
         self.count_events = count_events
         self.lambda_param = lambda_param
 
-    # Calling the Lidstone probability calculation function
     def calc_prob(self, input_word: str) -> float:
-        return self.calc_lidstone_prob(input_word)
+        """
+        Returns the lidstone probability of the input_word
+        """
 
-    def calc_lidstone_prob(self, input_word: str) -> float:
-        # Returning the lidstone probability of the INPUT_WORD
-        return (self.unique_events.get(input_word, 0.0) + self.lambda_param) / (
-                self.count_events + (self.lambda_param * V))
+        return self.calc_prob_by_word_count(self.unique_events.get(input_word, 0.0))
+
+    def calc_prob_by_word_count(self, word_count: int) -> float:
+        """
+        Returns the lidstone probability of the word_count (separated for output 29)
+        """
+
+        return (word_count + self.lambda_param) / (self.count_events + (self.lambda_param * V))
 
     def test_probabilities_sum_to_1(self):
         sum_of_probs = 0.0
 
         # Sum the probabilities of seen events
         for word in self.unique_events.keys():
-            sum_of_probs += self.calc_lidstone_prob(word)
+            sum_of_probs += self.calc_prob(word)
 
         # Adding the probabilities for unseen events
         num_of_unseen_events = V - len(self.unique_events)
-        sum_of_probs += num_of_unseen_events * self.calc_lidstone_prob("unseen-word")
+        sum_of_probs += num_of_unseen_events * self.calc_prob("unseen-word")
 
         print(f"sum_of_probs = {sum_of_probs} ; lambda = {self.lambda_param}")
+
+    def calc_f_lambda(self, r: int) -> float:
+        """
+        Return the value f_lambda required for output 29
+        """
+
+        prob_by_word_count = self.calc_prob_by_word_count(r)
+
+        return round(prob_by_word_count * self.count_events, 5)
 
 
 class HeldoutSmoothingModel(BaseModel):
@@ -101,30 +119,16 @@ class HeldoutSmoothingModel(BaseModel):
             inversed_counter[count].append(event)
         return inversed_counter
 
-    # Calling the Held-out probability calculation function
     def calc_prob(self, input_word: str) -> float:
-        return self.calc_heldout_prob(input_word)
-
-    def calc_heldout_prob(self, input_word: str) -> float:
         """
-        Return the held-out probability of the INPUT_WORD
+        Return the held-out probability of the input_word
         """
 
         # Calculating how many times the INPUT_WORD shows up in T
         word_count = self.T_unique_events.get(input_word, 0.0)
 
-        # Calculating the sum of the frequencies of all words in H that show exactly {word_count} times in T
-        t_r = sum([self.H_unique_events.get(word, 0.0) for word in self.T_inversed_counter.get(word_count, [])])
-
-        if word_count != 0.0:
-            # Calculating the number of words that show {word_count} times in T
-            N_r = len(self.T_inversed_counter.get(word_count, []))
-        else:
-            # Calculating the number of words that show in T (words with count > 0)
-            words_that_show_in_T = [key for key, value in self.T_unique_events.items() if value > 0]
-
-            # Calculating the number of words that don't show in T (because word_count is 0)
-            N_r = V - len(words_that_show_in_T)
+        t_r = self._calc_t_r(word_count)
+        N_r = self._calc_N_r(word_count)
 
         # Calculating the size of H
         H_size = sum(self.H_unique_events.values())
@@ -132,15 +136,48 @@ class HeldoutSmoothingModel(BaseModel):
         # Held-out probability
         return t_r / (N_r * H_size)
 
+    def _calc_t_r(self, r: int) -> int:
+        """
+        Returns the value of t_r
+        """
+
+        # Calculating the sum of the frequencies of all words in H that show exactly {r} times in T
+        return sum([self.H_unique_events.get(word, 0.0) for word in self.T_inversed_counter.get(r, [])])
+
+    def _calc_N_r(self, r: int) -> int:
+        if r != 0.0:
+            # Calculating the number of words that show {word_count} times in T
+            N_r = len(self.T_inversed_counter.get(r, []))
+        else:
+            # Calculating the number of words that show in T (words with count > 0)
+            words_that_show_in_T = [key for key, value in self.T_unique_events.items() if value > 0]
+
+            # Calculating the number of words that don't show in T (because word_count is 0)
+            N_r = V - len(words_that_show_in_T)
+
+        return N_r
+
+    def calc_values_for_output_29(self, r: int) -> Tuple[float, int, int]:
+        """
+        Return the values required for output 29
+        """
+
+        t_r = self._calc_t_r(r)
+        N_r = self._calc_N_r(r)
+
+        f_H = t_r / N_r
+
+        return round(f_H, 5), N_r, int(t_r)
+
     def test_probabilities_sum_to_1(self):
         sum_of_probs = 0.0
 
         # Sum the probabilities of seen events
         for word in self.T_unique_events.keys():
-            sum_of_probs += self.calc_heldout_prob(word)
+            sum_of_probs += self.calc_prob(word)
 
         # Add the probabilities for unseen events
         num_of_unseen_events = V - len(self.T_unique_events.keys())
-        sum_of_probs += num_of_unseen_events * self.calc_heldout_prob("unseen-word")
+        sum_of_probs += num_of_unseen_events * self.calc_prob("unseen-word")
 
         print(f"sum_of_probs = {sum_of_probs}")

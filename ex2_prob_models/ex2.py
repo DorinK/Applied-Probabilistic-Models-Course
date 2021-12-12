@@ -1,15 +1,14 @@
 import math
 import sys
 from collections import Counter
-from language_models import LidstoneSmoothingModel, HeldoutSmoothingModel
+from typing import List
+
+from language_models import LidstoneSmoothingModel, HeldoutSmoothingModel, V
 
 """"""""""""""""""""""""""""""""""""""
 #     Dorin Keshales    313298424
 #     Eran Hirsch       302620745
 """"""""""""""""""""""""""""""""""""""
-
-# The vocabulary size |V|
-V = 300000
 
 # Command-line arguments
 development_set_filename = sys.argv[1]
@@ -44,7 +43,7 @@ def find_best_lambda_param(train_count_events: int, train_unique_events: Counter
     return best_lambda, best_lambda_perplexity
 
 
-def read_file_and_pull_out_events(file_name, prefix):
+def read_file_and_pull_out_events(file_name: str, prefix: str) -> List[str]:
     # Opening the requested file
     with open(file_name, 'r', encoding='utf-8') as dev:
 
@@ -132,9 +131,9 @@ if __name__ == '__main__':
         lidstone_model_1_00 = LidstoneSmoothingModel(1.0, len(training_set), train_unique_events)
 
         # Writing P(Event = INPUT_WORD) as estimated by lidstone_model_0_01 model using λ = 0.10 to the output file
-        f.write(f'#Output14\t{lidstone_model_0_10.calc_lidstone_prob(INPUT_WORD)}\n')
+        f.write(f'#Output14\t{lidstone_model_0_10.calc_prob(INPUT_WORD)}\n')
         # Writing P(Event = ’unseen-word’) as estimated by lidstone_model_0_01 model using λ = 0.10 to the output file
-        f.write(f'#Output15\t{lidstone_model_0_10.calc_lidstone_prob("unseen-word")}\n')
+        f.write(f'#Output15\t{lidstone_model_0_10.calc_prob("unseen-word")}\n')
 
         # Using a Counter to get all the unique words (events) in the validation set and the number of their occurrences
         val_unique_events = Counter(val_set)
@@ -172,16 +171,16 @@ if __name__ == '__main__':
         heldout_model = HeldoutSmoothingModel(Counter(heldout_training_set), Counter(heldout_val_set))
 
         # Writing P(Event = INPUT_WORD) as estimated by the heldout_model model to the output file
-        f.write(f'#Output23\t{heldout_model.calc_heldout_prob(INPUT_WORD)}\n')
+        f.write(f'#Output23\t{heldout_model.calc_prob(INPUT_WORD)}\n')
         # Writing P(Event = ’unseen-word’) as estimated by the heldout_model model to the output file
-        f.write(f'#Output24\t{heldout_model.calc_heldout_prob("unseen-word")}\n')
+        f.write(f'#Output24\t{heldout_model.calc_prob("unseen-word")}\n')
 
-        """"" Test probabilities sum to 1 """""
-
-        lidstone_model_0_01.test_probabilities_sum_to_1()
-        lidstone_model_0_10.test_probabilities_sum_to_1()
-        lidstone_model_1_00.test_probabilities_sum_to_1()
-        heldout_model.test_probabilities_sum_to_1()
+        # """"" Test probabilities sum to 1 """""
+        #
+        # lidstone_model_0_01.test_probabilities_sum_to_1()
+        # lidstone_model_0_10.test_probabilities_sum_to_1()
+        # lidstone_model_1_00.test_probabilities_sum_to_1()
+        # heldout_model.test_probabilities_sum_to_1()
 
         """"" Models evaluation on test set """""
 
@@ -208,17 +207,12 @@ if __name__ == '__main__':
 
         # Writing the string ’L’ to the output file if the  Lidstone model is a better language model for the test set
         # than the held-out model; otherwise writing the string ’H’ to the output file
-        f.write(f'#Output28\tL\n') if lidstone_model_test_perplexity < heldout_model_test_perplexity else f.write(
-            f'#Output28\tH\n')
+        letter_to_write = "L" if lidstone_model_test_perplexity < heldout_model_test_perplexity else "H"
+        f.write(f'#Output28\t{letter_to_write}\n')
 
+        # Writing table comparing different r values
         f.write(f'#Output29\n')
-        f.write(f'0\t\n')
-        f.write(f'1\t\n')
-        f.write(f'2\t\n')
-        f.write(f'3\t\n')
-        f.write(f'4\t\n')
-        f.write(f'5\t\n')
-        f.write(f'6\t\n')
-        f.write(f'7\t\n')
-        f.write(f'8\t\n')
-        f.write(f'9\t\n')
+        for r in range(10):
+            f_lambda = lidstone_model_best_lambda.calc_f_lambda(r)
+            f_H, N_r, t_r = heldout_model.calc_values_for_output_29(r)
+            f.write(f'{r}\t{f_lambda}\t{f_H}\t{N_r}\t{t_r}\n')

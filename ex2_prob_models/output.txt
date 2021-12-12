@@ -1,6 +1,6 @@
 #Students	Dorin Keshales	Eran Hirsch	313298424	302620745
-#Output1	ex2_files/dataset/develop.txt
-#Output2	ex2_files/dataset/test.txt
+#Output1	/Users/eranh/OneDrive/Bar Ilan/89919 Probabilistic models/e2/ex2_files/dataset/develop.txt
+#Output2	/Users/eranh/OneDrive/Bar Ilan/89919 Probabilistic models/e2/ex2_files/dataset/test.txt
 #Output3	honduras
 #Output4	output.txt
 #Output5	300000
@@ -28,13 +28,13 @@
 #Output27	1610.1240952845353
 #Output28	L
 #Output29
-0	
-1	
-2	
-3	
-4	
-5	
-6	
-7	
-8	
-9	
+0	0.05724	0.04264	286636	12221
+1	1.01128	0.70477	5870	4137
+2	1.96532	1.57221	2001	3146
+3	2.91936	2.50278	1080	2703
+4	3.8734	3.45701	663	2292
+5	4.82744	4.49897	485	2182
+6	5.78147	5.54037	322	1784
+7	6.73551	6.53135	303	1979
+8	7.68955	7.73709	213	1648
+9	8.64359	7.96791	187	1490
