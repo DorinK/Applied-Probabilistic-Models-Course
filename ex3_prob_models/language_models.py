@@ -1,12 +1,11 @@
+import math
+from abc import ABC, abstractmethod
+from collections import Counter
+
 """"""""""""""""""""""""""""""""""""""
 #     Dorin Keshales    313298424
 #     Eran Hirsch       302620745
 """"""""""""""""""""""""""""""""""""""
-
-
-import math
-from abc import ABC, abstractmethod
-from collections import Counter
 
 # The vocabulary size |V|
 V = 300000
@@ -75,7 +74,6 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
         return round(prob_by_word_count * self.count_events, 5)
 
     def test_probabilities_sum_to_1(self):
-
         sum_of_probs = 0.0
 
         # Sum the probabilities of seen events
