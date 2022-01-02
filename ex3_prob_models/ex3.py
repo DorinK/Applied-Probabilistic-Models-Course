@@ -5,6 +5,7 @@ from collections import defaultdict, Counter
 from dataclasses import dataclass
 from typing import List, Tuple
 from language_models import LidstoneSmoothingModel
+import numpy as np
 
 """"""""""""""""""""""""""""""""""""""
 #     Dorin Keshales    313298424
@@ -24,6 +25,25 @@ class Article:
 class Cluster:
     cluster_id: int
     articles: List[Article]
+    lidstone_model: LidstoneSmoothingModel
+
+    @classmethod
+    def create(cls, cluster_id: int, articles: List[Article]):
+        # TODO: Experiment with several lambda values.
+        lambda_param = 0.1
+
+        # Calculating a counter per cluster, in order to get the training set stats for the lidstone model.
+        cluster_words_counter = Counter()
+        for article in articles:
+            for word, word_count in article.words_counter.items():
+                cluster_words_counter[word] += word_count
+
+        # The cluster's lidstone will be used later in equation (5) for the prob of word k in cluster i.
+        lidstone_model = LidstoneSmoothingModel(lambda_param, sum(cluster_words_counter.values()),
+                                                cluster_words_counter)
+        # lidstone_model.test_probabilities_sum_to_1()
+
+        return cls(cluster_id, articles, lidstone_model)
 
 
 def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]:
@@ -97,7 +117,7 @@ def _create_clusters(articles: List[Article]) -> List[Cluster]:
     clusters_objs = []
     # Creating Cluster object for each of the 9 clusters.
     for cluster_id, articles in clusters.items():
-        clusters_objs.append(Cluster(cluster_id, articles))
+        clusters_objs.append(Cluster.create(cluster_id, articles))
 
     return clusters_objs
 
@@ -124,7 +144,7 @@ def read_file_and_pull_out_events(file_name: str, prefix: str) -> Tuple[List[Clu
     return clusters, num_of_articles
 
 
-def e_step(lidstone_model, alpha_i_prior, article: Article) -> float:
+def e_step_numerator(lidstone_model, alpha_i_prior, article: Article) -> float:
 
     """
     Calculation of w_t_i (formula 1 in the supplemental material) in the E step.
@@ -149,42 +169,50 @@ def e_step(lidstone_model, alpha_i_prior, article: Article) -> float:
 
     # The numerator of w_t_i (formula 1 in the supplemental material).
     numerator = alpha_i_prior * pi_multiplication_result
-    # The denominator of w_t_i (formula 1 in the supplemental material).
-    denominator =
 
-    # Return the value of w_t_i.
-    return numerator / denominator
+    # Return the numerator.
+    return numerator
 
 
-def e_step_per_cluster(cluster: Cluster, total_num_of_articles: int):
+def e_step_per_article(article: Article, all_clusters: List[Cluster], total_num_of_articles: int) -> List[float]:
+    w_ti_per_cluster = []
+    clusters_numerators = []
+    all_clusters_denominator = 0.0
+    for cluster in all_clusters:
+        # TODO: Handle Underflow problem.
+        # Calculating alpha_i for the current cluster (formula 2 in the supplemental material).
+        alpha_i_prior = len(cluster.articles) / total_num_of_articles
 
-    # TODO: Experiment with several lambda values.
-    lambda_param = 0.1
+        cluster_numerator = e_step_numerator(cluster.lidstone_model, alpha_i_prior, article)
+        clusters_numerators.append(cluster_numerator)
+        all_clusters_denominator += cluster_numerator
 
-    # Calculating a counter per cluster, in order to get the training set stats for the lidstone model.
-    cluster_words_counter = Counter()
-    for article in cluster.articles:
-        for word, word_count in article.words_counter.items():
-            cluster_words_counter[word] += word_count
+    for cluster_numerator in clusters_numerators:
+        w_ti_per_cluster.append(cluster_numerator / all_clusters_denominator)
 
-    # The cluster's lidstone will be used later in equation (5) for the prob of word k in cluster i.
-    lidstone_model = LidstoneSmoothingModel(lambda_param, sum(cluster_words_counter.values()), cluster_words_counter)
-    # lidstone_model.test_probabilities_sum_to_1()
+    return w_ti_per_cluster
 
-    # TODO: Handle Underflow problem.
-    # Calculating alpha_i for the current cluster (formula 2 in the supplemental material).
-    alpha_i_prior = len(cluster.articles) / total_num_of_articles
 
-    # Calculating the E step for each article in the current cluster.
-    for article in cluster.articles:
-        e_step(lidstone_model, alpha_i_prior, article)
+def step(clusters: List[Cluster], total_num_of_articles: int) -> List[Cluster]:
+    # Performing the E step on each one of the clusters.
+    new_clusters = defaultdict(list)
+    for cluster in clusters:
+        for article in cluster.articles:
+            w_ti_per_cluster = e_step_per_article(article, clusters, total_num_of_articles)
+            new_cluster_idx_for_article = np.argmax(w_ti_per_cluster)
+            clusters[new_cluster_idx_for_article].append(article)
+
+    new_clusters_objs = []
+    # Creating Cluster object for each of the 9 clusters.
+    for cluster_id, articles in new_clusters.items():
+        new_clusters_objs.append(Cluster.create(cluster_id, articles))
+
+    return new_clusters_objs
 
 
 if __name__ == '__main__':
 
     clusters, total_num_of_articles = read_file_and_pull_out_events(development_set_filename, '<TRAIN')
 
-    # Performing the E step on each one of the clusters.
-    for cluster in clusters:
-        e_step_per_cluster(cluster, total_num_of_articles)
-    print(clusters)
+    while True:
+        step(clusters, total_num_of_articles)
