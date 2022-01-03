@@ -7,9 +7,6 @@ from collections import Counter
 #     Eran Hirsch       302620745
 """"""""""""""""""""""""""""""""""""""
 
-# The vocabulary size |V|
-V = 300000
-
 
 class BaseSmoothingModel(ABC):
     """
@@ -43,10 +40,11 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
     Lidstone smoothing model class
     """
 
-    def __init__(self, lambda_param: float, count_events: int, unique_events: Counter):
+    def __init__(self, lambda_param: float, count_events: int, unique_events: Counter, vocab_size: int):
         self.unique_events = unique_events
         self.count_events = count_events
         self.lambda_param = lambda_param
+        self.vocab_size = vocab_size
 
     def calc_prob(self, input_word: str) -> float:
         """
@@ -60,7 +58,7 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
         Returns the lidstone probability of the input word_count (separated for output 29)
         """
 
-        return (word_count + self.lambda_param) / (self.count_events + (self.lambda_param * V))
+        return (word_count + self.lambda_param) / (self.count_events + (self.lambda_param * self.vocab_size))
 
     def calc_f_lambda(self, r: int) -> float:
         """
@@ -81,7 +79,7 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
             sum_of_probs += self.calc_prob(word)
 
         # Adding the probabilities for unseen events
-        num_of_unseen_events = V - len(self.unique_events)
+        num_of_unseen_events = self.vocab_size - len(self.unique_events)
         sum_of_probs += num_of_unseen_events * self.calc_prob("unseen-word")
 
         print(f"sum_of_probs = {sum_of_probs} ; lambda = {self.lambda_param}")
