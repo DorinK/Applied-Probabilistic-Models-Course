@@ -16,13 +16,10 @@ import pandas as pd
 """"""""""""""""""""""""""""""""""""""
 
 # Parameters of the EM algorithm
-EPSILON_THRESHOLD = 0.00001
+EPSILON_THRESHOLD = 0.0001
 DEFAULT_K = 10
-LAMBDA_PARAM = 0.968
-# TODO: Revert threshold
-STOPPING_THRESHOLD = 0.0001
-# STOPPING_THRESHOLD = 1.0
-# STOPPING_THRESHOLD = 10000.0
+LAMBDA_PARAM = 1.0
+STOPPING_THRESHOLD = 1.0
 
 # Input arguments
 development_set_filename = "dataset/develop.txt"
@@ -92,9 +89,6 @@ class ClusterParams:
         """
         Calculating alpha_i and handling underflow via the threshold solution suggested in the supplemental material.
         """
-        # TODO: Update this comment?
-        # Calculating alpha_i for the current cluster (formula 2 in the supplemental material).
-
         alpha_prior = sum(cluster_w_ti) / num_of_articles
 
         # If alpha_j becomes less than the threshold we fix alpha_j to be the threshold.
@@ -113,7 +107,7 @@ class ClusterParams:
 
 def test_alpha_probabilities_sum_to_1(clusters: List[Cluster]):
     all_alphas_sum_after_normalization = sum([cluster.cluster_params.normalized_alpha_prior for cluster in clusters])
-    # assert abs(all_alphas_sum_after_normalization - 1.0) < 0.0005
+    assert abs(all_alphas_sum_after_normalization - 1.0) < 0.0005
 
 
 def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]:
@@ -251,7 +245,6 @@ def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
     """
     sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i = 0.0
 
-    # TODO: Check if it is ok to run over all words in the document instead of all words in vocab.
     for word_k, word_k_count in article.words_counter.items():
         # The frequency of word k in document t.
         n_t_k = word_k_count
@@ -319,7 +312,6 @@ def calc_perplexity(likelihood: float, count_of_words: int) -> float:
     """
     Calculating the mean perplexity per word.
     """
-    # TODO: Check if this value makes sense.
     return math.exp((-1 / count_of_words) * likelihood)
 
 
@@ -353,10 +345,8 @@ def _e_step(all_articles: List[Article], clusters: List[Cluster]) -> List[List[f
     all_w_ti = []
     new_clusters = defaultdict(list)
     for article in all_articles:
-        # TODO: Check if we should really simply sum the clusters_numerators (z_i_t = z_i)
         w_ti_per_cluster = e_step_per_article(article, clusters)
         all_w_ti.append(w_ti_per_cluster)
-        # TODO: Check if the denominator is necessary, because it is irrelevant when using argmax.
         new_cluster_idx_for_article = np.argmax(w_ti_per_cluster) + 1
         new_clusters[new_cluster_idx_for_article].append(article)
 
@@ -472,15 +462,14 @@ def main():
         print(f"new_likelihood: {new_likelihood}")
 
         if prev_likelihood:
-            assert new_likelihood >= prev_likelihood  # TODO: Remove assert
-            assert new_perplexity <= prev_perplexity  # TODO: Remove assert
+            # assert new_likelihood >= prev_likelihood  # TODO: Remove assert
+            # assert new_perplexity <= prev_perplexity  # TODO: Remove assert
             # Stop the EM algorithm if the likelihood value converges.
             if new_likelihood - prev_likelihood <= STOPPING_THRESHOLD:
                 break
 
         prev_likelihood = new_likelihood
         prev_perplexity = new_perplexity
-        # TODO: Why likelihood is negative?
 
         all_w_ti = _e_step(articles, clusters)  # Performing the E step of the EM algorithm.
         _m_step(articles, clusters, vocab_size, all_w_ti)  # Performing the M step of the EM algorithm.
