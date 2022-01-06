@@ -55,21 +55,10 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
 
     def calc_prob_by_word_count(self, word_count: int) -> float:
         """
-        Returns the lidstone probability of the input word_count (separated for output 29)
+        Returns the lidstone probability of the input word_count
         """
 
         return (word_count + self.lambda_param) / (self.count_events + (self.lambda_param * self.vocab_size))
-
-    def calc_f_lambda(self, r: int) -> float:
-        """
-        Returns the f_λ value required for output 29
-        """
-
-        # Calculating the lidstone probability of the word_count r
-        prob_by_word_count = self.calc_prob_by_word_count(r)
-
-        # Rounding the f_λ value to 5 digits after the decimal point
-        return round(prob_by_word_count * self.count_events, 5)
 
     def test_probabilities_sum_to_1(self):
         sum_of_probs = 0.0

@@ -18,11 +18,11 @@ import pandas as pd
 """"""""""""""""""""""""""""""""""""""
 
 # Parameters of the EM algorithm
-EPSILON_THRESHOLD = 0.01
+EPSILON_THRESHOLD = 0.00001
 DEFAULT_K = 10
-LAMBDA_PARAM = 1.0
+LAMBDA_PARAM = 0.968
 # TODO: Revert threshold
-STOPPING_THRESHOLD = 1.0
+STOPPING_THRESHOLD = 1e-6
 # STOPPING_THRESHOLD = 10000.0
 
 # Input arguments
@@ -32,8 +32,15 @@ topics_filename = "dataset/topics.txt"
 
 @dataclass
 class Article:
+    article_id: int
     words_counter: Counter
     gold_topics: List[str]
+
+    def __eq__(self, other):
+        return self.article_id == other.article_id
+
+    def __hash__(self):
+        return hash(self.article_id)
 
 
 @dataclass()
@@ -52,26 +59,27 @@ class ClusterParams:
     Class the handles the EM params - alpha and P_i_k.
     """
     lidstone_model: Optional[LidstoneSmoothingModel] = None
-    non_normalized_ln_alpha_prior: Optional[float] = None
-    normalized_ln_alpha_prior: Optional[float] = None
+    non_normalized_alpha_prior: Optional[float] = None
+    normalized_alpha_prior: Optional[float] = None
 
-    def update(self, articles: List[Article], num_of_articles: int, vocab_size: int):
+    def update(self, articles: List[Article], num_of_articles: int, vocab_size: int, cluster_w_ti: List[float]):
         """
         Updating the parameters of the EM algorithm - alpha and P_i_k (P_i_k is updated by updating
         the lidstone model).
         """
-        self.lidstone_model = self._calc_lidstone_model(articles, vocab_size)
-        self.non_normalized_ln_alpha_prior = self._calc_alpha_prior(articles, num_of_articles)
+        self.lidstone_model = self._calc_lidstone_model(articles, vocab_size, cluster_w_ti)
+        self.non_normalized_alpha_prior = self._calc_alpha_prior(cluster_w_ti, num_of_articles)
 
-    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int) -> LidstoneSmoothingModel:
+    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int, cluster_w_ti: List[float]) -> LidstoneSmoothingModel:
         """
         Calculating the Lidstone model based on the training set and lambda value.
         """
         # Calculating a counter per cluster, in order to get the training set stats for the lidstone model.
         cluster_words_counter = Counter()
-        for article in articles:
+        assert len(articles) == len(cluster_w_ti)
+        for article, article_w_ti in zip(articles, cluster_w_ti):
             for word, word_count in article.words_counter.items():
-                cluster_words_counter[word] += word_count
+                cluster_words_counter[word] += word_count * article_w_ti
 
         # The cluster's lidstone will be used later in equation (5) for P_i_k (the prob of word k in cluster i).
         lidstone_model = LidstoneSmoothingModel(LAMBDA_PARAM, sum(cluster_words_counter.values()),
@@ -80,33 +88,31 @@ class ClusterParams:
         # lidstone_model.test_probabilities_sum_to_1()
         return lidstone_model
 
-    def _calc_alpha_prior(self, articles: List[Article], num_of_articles: int):
+    def _calc_alpha_prior(self, cluster_w_ti: List[float], num_of_articles: int):
         """
         Calculating alpha_i and handling underflow via the threshold solution suggested in the supplemental material.
         """
         # TODO: Update this comment?
         # Calculating alpha_i for the current cluster (formula 2 in the supplemental material).
-        alpha_prior = len(articles) / num_of_articles
+
+        alpha_prior = sum(cluster_w_ti) / num_of_articles
 
         # If alpha_j becomes less than the threshold we fix alpha_j to be the threshold.
         if alpha_prior < EPSILON_THRESHOLD:
             alpha_prior = EPSILON_THRESHOLD
 
-        # Calculating ln(alpha_i) as requested for calculating z_i.
-        ln_alpha_prior = math.log(alpha_prior)
-
-        return ln_alpha_prior
+        return alpha_prior
 
     def set_normalized_alpha(self, all_alphas_sum: float):
         """
         After applying the fix to alpha we need to make sure that Σi alpha_i = 1.
         This is done by re-computing for all j the normalized value of alpha_j.
         """
-        self.normalized_ln_alpha_prior = self.non_normalized_ln_alpha_prior / all_alphas_sum
+        self.normalized_alpha_prior = self.non_normalized_alpha_prior / all_alphas_sum
 
 
 def test_alpha_probabilities_sum_to_1(clusters: List[Cluster]):
-    all_alphas_sum_after_normalization = sum([cluster.cluster_params.normalized_ln_alpha_prior for cluster in clusters])
+    all_alphas_sum_after_normalization = sum([cluster.cluster_params.normalized_alpha_prior for cluster in clusters])
     print(f"All alphas sum after normalization: {all_alphas_sum_after_normalization}")
 
 
@@ -115,12 +121,14 @@ def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]
     Reading the articles from develop.txt and storing the words of each article in an Article object.
     """
     articles = []
+    article_id = None
     topics = None
 
     for line in file:
         if not line:
             continue
         elif line.startswith(prefix):
+            article_id = line.split("\t")[1]
             topics = line.split("\t")[2:]
         else:
             article_words = Counter()
@@ -128,8 +136,9 @@ def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]
                 article_words[word] += 1  # Storing the frequency of each word in the article.
 
             # Make each article as object of type Article.
+            assert article_id is not None
             assert topics is not None
-            article = Article(article_words, topics)
+            article = Article(article_id, article_words, topics)
             articles.append(article)
 
     return articles
@@ -157,7 +166,7 @@ def _filter_rare_words(articles: List[Article]) -> Tuple[List[Article], int, int
         for word, word_count in article.words_counter.items():
             if word in common_words:
                 filtered_article_words[word] = word_count
-        updated_articles.append(Article(filtered_article_words, article.gold_topics))
+        updated_articles.append(Article(article.article_id, filtered_article_words, article.gold_topics))
 
     # Calculating the updated vocab size - 6800.
     vocab_size = len(common_words)
@@ -183,17 +192,27 @@ def _create_clusters(articles: List[Article], num_of_articles: int, vocab_size: 
 
     clusters_objs = []
     # Creating Cluster object for each of the 9 clusters.
-    for cluster_id, articles in clusters.items():
-        empty_params = ClusterParams()
-        clusters_objs.append(Cluster(cluster_id, articles, empty_params))
+    for cluster_id, cluster_articles in clusters.items():
+        initial_params = ClusterParams()
+        # num_clusters x num_articles
+        initial_w_ti = []
+        for article in articles:
+            if article in cluster_articles:
+                initial_w_ti.append(1.0)
+            else:
+                initial_w_ti.append(0.0)
+        initial_params.update(articles, num_of_articles, vocab_size, initial_w_ti)
+        clusters_objs.append(Cluster(cluster_id, cluster_articles, initial_params))
 
-    # Activate once the m_step after the initial creation of the clusters to initialize the empty params.
-    _m_step(clusters_objs, num_of_articles, vocab_size)
+    # Normalizing the alphas.
+    all_alphas_sum = sum([cluster_obj.cluster_params.non_normalized_alpha_prior for cluster_obj in clusters_objs])
+    for cluster in clusters_objs:
+        cluster.cluster_params.set_normalized_alpha(all_alphas_sum)
 
     return clusters_objs
 
 
-def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Cluster], int, int, int]:
+def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Article], List[Cluster], int, int, int]:
     """
     Reading the input file, dividing them into articles, filtering rare words from the corpus and
     creating 9 initial clusters.
@@ -216,7 +235,7 @@ def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Clus
     clusters = _create_clusters(filtered_articles, num_of_articles, vocab_size)
 
     # Returning the initialised 9 clusters + the total number of articles in the develop.txt file.
-    return clusters, num_of_articles, vocab_size, count_of_words
+    return filtered_articles, clusters, num_of_articles, vocab_size, count_of_words
 
 
 def read_topics_file(file_name: str) -> List[str]:
@@ -246,7 +265,7 @@ def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
         sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i += n_t_k_times_ln_prob_of_word_k_in_cluster_i
 
     # Calculating z_i.
-    z_i = cluster.cluster_params.normalized_ln_alpha_prior + sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i
+    z_i = math.log(cluster.cluster_params.normalized_alpha_prior) + sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i
 
     # Return z_i.
     return z_i
@@ -285,16 +304,15 @@ def calc_w_t_i_numerators_and_denominator(article: Article, all_clusters: List[C
     return w_t_i_numerators, w_t_i_denominator, m
 
 
-def calc_likelihood(clusters: List[Cluster]) -> float:
+def calc_likelihood(articles: List[Article], clusters: List[Cluster]) -> float:
     """
     Calculating the log likelihood.
     """
     sum = 0.0
 
-    for cluster in clusters:
-        for article in cluster.articles:
-            _, w_t_i_denominator, m = calc_w_t_i_numerators_and_denominator(article, clusters)
-            sum += m + math.log(w_t_i_denominator)
+    for article in articles:
+        _, w_t_i_denominator, m = calc_w_t_i_numerators_and_denominator(article, clusters)
+        sum += m + math.log(w_t_i_denominator)
 
     # Returning the log likelihood value.
     return sum
@@ -324,45 +342,54 @@ def e_step_per_article(article: Article, all_clusters: List[Cluster]) -> List[fl
     for w_t_i_numerator in w_t_i_numerators:
         w_ti_per_cluster.append(w_t_i_numerator / w_t_i_denominator)  # denominator is not necessary here (argmax)
 
-    # print(f"sum(w_ti_per_cluster) {sum(w_ti_per_cluster)}")
+    # assert abs(sum(w_ti_per_cluster) - 1.0) < 0.005
 
     return w_ti_per_cluster
 
 
-def _e_step(clusters: List[Cluster]):
+def _e_step(all_articles: List[Article], clusters: List[Cluster]) -> List[List[float]]:
     """
     By computing the w_t_i prob for each cluster, we get the new division of documents into clusters.
     """
 
     # Performing the E step on each one of the clusters.
+    all_w_ti = []
     new_clusters = defaultdict(list)
-    for cluster in clusters:
-        for article in cluster.articles:
-            # TODO: Check if we should really simply sum the clusters_numerators (z_i_t = z_i)
-            w_ti_per_cluster = e_step_per_article(article, clusters)
-            # TODO: Check if the denominator is necessary, because it is irrelevant when using argmax.
-            new_cluster_idx_for_article = np.argmax(w_ti_per_cluster) + 1
-            new_clusters[new_cluster_idx_for_article].append(article)
+    for article in all_articles:
+        # TODO: Check if we should really simply sum the clusters_numerators (z_i_t = z_i)
+        w_ti_per_cluster = e_step_per_article(article, clusters)
+        all_w_ti.append(w_ti_per_cluster)
+        # TODO: Check if the denominator is necessary, because it is irrelevant when using argmax.
+        new_cluster_idx_for_article = np.argmax(w_ti_per_cluster) + 1
+        new_clusters[new_cluster_idx_for_article].append(article)
 
     cluster_by_cluster_id = {cluster.cluster_id: cluster for cluster in clusters}
 
     # Creating Cluster object for each of the 9 clusters.
+    for cluster in clusters:
+        cluster.update([])
     for cluster_id, articles in new_clusters.items():
         cluster = cluster_by_cluster_id[cluster_id]
         cluster.update(articles)
 
+    return all_w_ti
 
-def _m_step(new_clusters: List[Cluster], num_of_articles: int, vocab_size: int):
+
+def _m_step(articles: List[Article], new_clusters: List[Cluster], num_of_articles: int, vocab_size: int, all_w_ti: List[List[float]]):
     """
     Performing the M step of the EM algorithm - updating the parameters.
     """
 
+    # assert all([len(x) == len(new_clusters) for x in all_w_ti])
+    # assert all([abs(sum(x) - 1.0) < 0.005 for x in all_w_ti])
+
     # Updating the parameters alpha_i and P_i_k.
-    for cluster in new_clusters:
-        cluster.cluster_params.update(cluster.articles, num_of_articles, vocab_size)
+    for cluster_idx, cluster in enumerate(new_clusters):
+        cluster_w_ti = np.array(all_w_ti).T[cluster_idx]
+        cluster.cluster_params.update(articles, num_of_articles, vocab_size, cluster_w_ti)
 
     # Normalizing the alphas.
-    all_alphas_sum = sum([cluster_obj.cluster_params.non_normalized_ln_alpha_prior for cluster_obj in new_clusters])
+    all_alphas_sum = sum([cluster_obj.cluster_params.non_normalized_alpha_prior for cluster_obj in new_clusters])
     for cluster in new_clusters:
         cluster.cluster_params.set_normalized_alpha(all_alphas_sum)
 
@@ -427,7 +454,7 @@ if __name__ == '__main__':
     topics = read_topics_file(topics_filename)
 
     # Initializing 9 clusters.
-    clusters, total_num_of_articles, vocab_size, count_of_words = preprocessing_the_input_file(
+    articles, clusters, total_num_of_articles, vocab_size, count_of_words = preprocessing_the_input_file(
         development_set_filename, '<TRAIN')
 
     num_epochs = 0
@@ -440,7 +467,7 @@ if __name__ == '__main__':
 
         num_epochs += 1
 
-        new_likelihood = calc_likelihood(clusters)  # Calculating the new likelihood.
+        new_likelihood = calc_likelihood(articles, clusters)  # Calculating the new likelihood.
         new_perplexity = calc_perplexity(new_likelihood, count_of_words)  # Calculating the new perplexity.
 
         # Save new likelihood and perplexity values.
@@ -459,8 +486,8 @@ if __name__ == '__main__':
         prev_perplexity = new_perplexity
         # TODO: Why likelihood is negative?
 
-        _e_step(clusters)  # Performing the E step of the EM algorithm.
-        _m_step(clusters, total_num_of_articles, vocab_size)  # Performing the M step of the EM algorithm.
+        all_w_ti = _e_step(articles, clusters)  # Performing the E step of the EM algorithm.
+        _m_step(articles, clusters, total_num_of_articles, vocab_size, all_w_ti)  # Performing the M step of the EM algorithm.
 
     """"" Graphs """""
 
