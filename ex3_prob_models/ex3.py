@@ -370,54 +370,59 @@ def _m_step(new_clusters: List[Cluster], num_of_articles: int, vocab_size: int):
     # test_alpha_probabilities_sum_to_1(new_clusters)
 
 
-def plot_graph(title, x_label, y_label, indexes, values, plot_color, x_ticks=None):
+def plot_graph(title, x_label, y_label, indexes, values, plot_color):
     """
-    Function for plotting graphs.
+    This function creates likelihood and perplexity graphs.
     """
     fig = pyplot.figure()
     ax = fig.add_subplot(111)
-    ax.set_title(title)
 
+    ax.set_title(title)
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
-    if x_label: pyplot.xticks(x_ticks)
 
     pyplot.plot(indexes, values, color=plot_color)
 
     plt.savefig("plots/" + title + ".png", dpi=192)
 
 
-def plot_histogram_of_topic(title, x_label, y_label, x, bins):
+def plot_histogram(title, x_label, y_label, x, bins, color):
+    """"
+    This function creates 9 histograms of topics, one for each cluster.
+    """
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
 
-    plt.title(title)
-    plt.xlabel(x_label)
-    plt.ylabel(y_label)
+    ax.set_title(title)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
 
-    # x = [value1, value2, value3, ....]
-    # x = [1, 1, 2, 3, 3, 5, 7, 8, 9, 10,
-    #      10, 11, 11, 13, 13, 15, 16, 17, 18, 18,
-    #      18, 19, 20, 21, 21, 23, 24, 24, 25, 25,
-    #      25, 25, 26, 26, 26, 27, 27, 27, 27, 27,
-    #      29, 30, 30, 31, 33, 34, 34, 34, 35, 36,
-    #      36, 37, 37, 38, 38, 39, 40, 41, 41, 42,
-    #      43, 44, 45, 45, 46, 47, 48, 48, 49, 50,
-    #      51, 52, 53, 54, 55, 55, 56, 57, 58, 60,
-    #      61, 63, 64, 65, 66, 68, 70, 71, 72, 74,
-    #      75, 77, 81, 83, 84, 87, 89, 90, 90, 91
-    #      ]
+    x_coordinates = np.arange(len(bins))
+    ax.bar(x_coordinates, x, align='center',color=color)
 
-    # plt.style.use('ggplot')
+    ax.xaxis.set_major_locator(plt.FixedLocator(x_coordinates))
+    ax.xaxis.set_major_formatter(plt.FixedFormatter(bins))
 
-    # plt.hist(x, bins=number of bins)
-    plt.hist(x, bins=bins)
-    # plt.hist(x, bins=10, color='#0504aa')
-    # plt.hist(x, bins=[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
+    # Make some labels.
+    rects = ax.patches
+    labels = x
 
+    for rect, label in zip(rects, labels):
+        height = rect.get_height()
+        ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
+                ha='center', va='bottom')
+
+    # plt.show()
     plt.savefig("plots/" + title + ".png", dpi=192)
 
 
 if __name__ == '__main__':
-    print(f"EPSILON_THRESHOLD={EPSILON_THRESHOLD};DEFAULT_K={DEFAULT_K};LAMBDA_PARAM={LAMBDA_PARAM};STOPPING_THRESHOLD={STOPPING_THRESHOLD}")
+
+    print(
+        f"EPSILON_THRESHOLD = {EPSILON_THRESHOLD}\n"
+        f"DEFAULT_K = {DEFAULT_K}\n"
+        f"LAMBDA_PARAM = {LAMBDA_PARAM}\n"
+        f"STOPPING_THRESHOLD = {STOPPING_THRESHOLD}\n")
 
     topics = read_topics_file(topics_filename)
 
@@ -457,7 +462,7 @@ if __name__ == '__main__':
         _e_step(clusters)  # Performing the E step of the EM algorithm.
         _m_step(clusters, total_num_of_articles, vocab_size)  # Performing the M step of the EM algorithm.
 
-    ### Graphs ###
+    """"" Graphs """""
 
     # Plotting the graphs of the Log Likelihood and Mean Perplexity per Word over epochs.
     plot_graph(title='Log Likelihood over Epochs', x_label="Epoch", y_label="Log Likelihood * 1e-6",
@@ -467,7 +472,7 @@ if __name__ == '__main__':
                indexes=[i for i in range(0, num_epochs)], values=perplexity_over_epochs,
                plot_color='indianred')
 
-    ### Confusion Matrix ###
+    """"" Confusion Matrix """""
 
     rows = []
     for cluster in sorted(clusters, key=lambda cluster: len(cluster.articles), reverse=True):
@@ -488,17 +493,15 @@ if __name__ == '__main__':
     df = pd.DataFrame(rows, columns=confusion_matrix_columns)
     print(df.set_index("cluster_id"))
 
-    ### Histograms ###
-
-    # for idx, row in df.iterrows():
-    #     plot_histogram_of_topic(f"Cluster: {row['cluster_id']}", "topics", "items", row[topics].to_list(), topics)
-
-    ### Accuracy ###
+    """"" Accuracy """""
 
     correct = 0
     total = 0
+    clusters_topics = []
     cluster_by_cluster_id = {cluster.cluster_id: cluster for cluster in clusters}
+
     for idx, row in df.iterrows():
+
         # Find cluster object
         cluster_id = row['cluster_id']
         cluster = cluster_by_cluster_id[cluster_id]
@@ -506,12 +509,29 @@ if __name__ == '__main__':
         # Calc dominant topic
         dominant_topic_idx = row[topics].argmax()
         dominant_topic = row[topics].index[dominant_topic_idx]
+        clusters_topics.append((cluster_id, dominant_topic))
 
         # Calc accuracy
         for article in cluster.articles:
             total += 1
             if dominant_topic in article.gold_topics:
                 correct += 1
+
+    """"" Histograms """""
+
+    clusters_topics.sort(key=lambda x: x[0])
+    updated_df = df.set_index('cluster_id').iterrows()
+    colors = ['teal', 'purple', 'mediumaquamarine', 'rosybrown', 'cadetblue', 'mediumpurple', 'cornflowerblue',
+              'darksalmon', 'palevioletred']
+
+    for idx, row in updated_df:
+        cluster_id, cluster_topic = clusters_topics[idx - 1]
+        plot_histogram_of_topic(title=f"Cluster {cluster_id} - {cluster_topic}",
+                                x_label="Topics",
+                                y_label="Number of documents",
+                                x=row[topics].to_list(),
+                                bins=topics,
+                                color=colors[idx-1])
 
     assert total == total_num_of_articles
     print(f"Accuracy: {correct / total}")
