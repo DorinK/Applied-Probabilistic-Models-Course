@@ -526,9 +526,9 @@ if __name__ == '__main__':
 
     for idx, row in updated_df:
         cluster_id, cluster_topic = clusters_topics[idx - 1]
-        plot_histogram_of_topic(title=f"Cluster {cluster_id} - {cluster_topic}",
+        plot_histogram(title=f"Cluster {cluster_id} - {cluster_topic}",
                                 x_label="Topics",
-                                y_label="Number of documents",
+                                y_label="Number of Documents",
                                 x=row[topics].to_list(),
                                 bins=topics,
                                 color=colors[idx-1])
