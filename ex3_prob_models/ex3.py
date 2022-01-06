@@ -1,3 +1,4 @@
+import os
 import math
 from collections import defaultdict, Counter
 from dataclasses import dataclass
@@ -28,6 +29,9 @@ topics_filename = "dataset/topics.txt"
 
 @dataclass
 class Article:
+    """
+     Class for creating an Article type object.
+    """
     article_id: int
     words_counter: Counter
     gold_topics: List[str]
@@ -41,11 +45,15 @@ class Article:
 
 @dataclass()
 class Cluster:
+    """
+    Class for creating a Cluster type object.
+    """
     cluster_id: Optional[int] = None
     articles: Optional[List[Article]] = None
     cluster_params: Optional['ClusterParams'] = None
 
     def update(self, articles: List[Article]):
+        """ Updating the articles in the cluster """
         self.articles = articles
 
 
@@ -63,11 +71,12 @@ class ClusterParams:
         Updating the parameters of the EM algorithm - alpha and P_i_k (P_i_k is updated by updating
         the lidstone model).
         """
+        # Updating the Lidstone model.
         self.lidstone_model = self._calc_lidstone_model(articles, vocab_size, cluster_w_ti)
+        # alpha_i calculation after treating the underflow problem in theE step (but before normalization).
         self.non_normalized_alpha_prior = self._calc_alpha_prior(cluster_w_ti, len(articles))
 
-    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int,
-                             cluster_w_ti: List[float]) -> LidstoneSmoothingModel:
+    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int, cluster_w_ti: List[float]) -> LidstoneSmoothingModel:
         """
         Calculating the Lidstone model based on the training set and lambda value.
         """
@@ -82,6 +91,7 @@ class ClusterParams:
         lidstone_model = LidstoneSmoothingModel(LAMBDA_PARAM, sum(cluster_words_counter.values()),
                                                 cluster_words_counter, vocab_size)
 
+        # Checking the probabilities of the Lidstone model sum to 1.
         # lidstone_model.test_probabilities_sum_to_1()
         return lidstone_model
 
@@ -91,7 +101,7 @@ class ClusterParams:
         """
         alpha_prior = sum(cluster_w_ti) / num_of_articles
 
-        # If alpha_j becomes less than the threshold we fix alpha_j to be the threshold.
+        # If alpha_j becomes less than the threshold, then we fix alpha_j to be the threshold.
         if alpha_prior < EPSILON_THRESHOLD:
             alpha_prior = EPSILON_THRESHOLD
 
@@ -106,8 +116,9 @@ class ClusterParams:
 
 
 def test_alpha_probabilities_sum_to_1(clusters: List[Cluster]):
+    """ Testing that all alpha probabilities sum to 1. """
     all_alphas_sum_after_normalization = sum([cluster.cluster_params.normalized_alpha_prior for cluster in clusters])
-    assert abs(all_alphas_sum_after_normalization - 1.0) < 0.0005
+    # assert abs(all_alphas_sum_after_normalization - 1.0) < 0.0005
 
 
 def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]:
@@ -118,20 +129,22 @@ def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]
     article_id = None
     topics = None
 
+    # For each line in the input file.
     for line in file:
         if not line:
             continue
         elif line.startswith(prefix):
             article_id = int(line.split("\t")[1])
-            topics = line.split("\t")[2:]
+            topics = line.split("\t")[2:]   # Storing the topics of each article in the input file.
         else:
             article_words = Counter()
             for word in line.split(' '):
                 article_words[word] += 1  # Storing the frequency of each word in the article.
 
+            # assert article_id is not None
+            # assert topics is not None
+
             # Make each article as object of type Article.
-            assert article_id is not None
-            assert topics is not None
             article = Article(article_id, article_words, topics)
             articles.append(article)
 
@@ -154,7 +167,7 @@ def _filter_rare_words(articles: List[Article]) -> Tuple[List[Article], int, int
 
     updated_articles = []
 
-    # Update the words in each article following the filtering of the rare words.
+    # Updating the words in each article following the filtering of the rare words.
     for article in articles:
         filtered_article_words = Counter()
         for word, word_count in article.words_counter.items():
@@ -178,19 +191,18 @@ def _create_clusters(articles: List[Article], vocab_size: int) -> List[Cluster]:
     running_cluster = 0
     clusters = defaultdict(list)
 
-    # Splitting the articles from develop.txt into 9 initial clusters.
+    # Splitting the articles from the input file (develop.txt) into 9 initial clusters.
     for article in articles:
         cluster_id = (running_cluster % 9) + 1
         clusters[cluster_id].append(article)
         running_cluster += 1
 
     clusters_objs = []
-    # Creating Cluster object for each of the 9 clusters.
+    # Creating Cluster object for each of the 9 initial clusters.
     for cluster_id, cluster_articles in clusters.items():
         initial_params = ClusterParams()
-        # num_clusters x num_articles
         initial_w_ti = []
-        for article in articles:
+        for article in articles:    # num_clusters x num_articles
             if article in cluster_articles:
                 initial_w_ti.append(1.0)
             else:
@@ -208,8 +220,8 @@ def _create_clusters(articles: List[Article], vocab_size: int) -> List[Cluster]:
 
 def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Article], List[Cluster], int, int]:
     """
-    Reading the input file, dividing them into articles, filtering rare words from the corpus and
-    creating 9 initial clusters.
+    Reading the input file, dividing them into articles, filtering rare words from the corpus and creating
+    9 initial clusters.
     """
 
     # Opening the requested file.
@@ -217,20 +229,24 @@ def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Arti
         # Ignoring the newline character (\n) at the end of each line.
         file = [x[:-2] if x.endswith("\n") else x for x in dev.readlines()]
 
-    # Parsing the input file into articles and the words of each article.
+    # Parsing the input file into articles and saving the words of each article.
     articles = _parse_input_file_to_articles(file, prefix)
 
     # Filtering rare words from the input corpus.
     filtered_articles, vocab_size, count_of_words = _filter_rare_words(articles)
 
-    # Splitting the articles into 9 clusters.
+    # Splitting the articles into initial 9 clusters.
     clusters = _create_clusters(filtered_articles, vocab_size)
 
-    # Returning the initialised 9 clusters + the total number of articles in the develop.txt file.
+    # Returning the filtered articles, the initialised 9 clusters, the new vocabulary size and the amount of
+    # words left in the dataset.
     return filtered_articles, clusters, vocab_size, count_of_words
 
 
 def read_topics_file(file_name: str) -> List[str]:
+    """
+    Reading the topics.txt file and extracting the possible topics of the dataset.
+    """
     with open(file_name, 'r', encoding='utf-8') as f:
         topics = [x[:-1] if x.endswith("\n") else x for x in f.readlines() if x is not "\n"]
 
@@ -239,9 +255,8 @@ def read_topics_file(file_name: str) -> List[str]:
 
 def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
     """
-    Handling Underflow in the E step by calculating z_i in order to calculate w_t_i.
-
-    ** Clearer formulas appear in lecture No. 8.
+    Handling the Underflow problem in the E step by calculating z_i (in order to calculate w_t_i), following
+    the instructions in the supplemental material.
     """
     sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i = 0.0
 
@@ -257,13 +272,13 @@ def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
     # Calculating z_i.
     z_i = math.log(cluster.cluster_params.normalized_alpha_prior) + sum_of_n_t_k_times_ln_prob_of_word_k_in_cluster_i
 
-    # Return z_i.
+    # Returning z_i.
     return z_i
 
 
 def calc_w_t_i_numerators_and_denominator(article: Article, all_clusters: List[Cluster], k: float = DEFAULT_K):
     """
-    Calculating the numerators of w_t_i (per cluster) and the denominator of w_t_i.
+    Calculating the numerators (per cluster) of w_t_i and the denominator of w_t_i.
     """
     clusters_z_i = []
 
@@ -288,7 +303,7 @@ def calc_w_t_i_numerators_and_denominator(article: Article, all_clusters: List[C
 
         w_t_i_numerators.append(w_t_i_numerator)
 
-    # Calculating the numerator of w_t_i (which is the sum of all w_t_i_numerators).
+    # Calculating the denominator of w_t_i (which is the sum of all the w_t_i_numerators).
     w_t_i_denominator = sum(w_t_i_numerators)
 
     return w_t_i_numerators, w_t_i_denominator, m
@@ -296,7 +311,7 @@ def calc_w_t_i_numerators_and_denominator(article: Article, all_clusters: List[C
 
 def calc_likelihood(articles: List[Article], clusters: List[Cluster]) -> float:
     """
-    Calculating the log likelihood.
+    Calculating the Log likelihood after a full EM iteration.
     """
     sum = 0.0
 
@@ -327,18 +342,18 @@ def e_step_per_article(article: Article, all_clusters: List[Cluster]) -> List[fl
     w_t_i_numerators, w_t_i_denominator, _ = calc_w_t_i_numerators_and_denominator(article, all_clusters)
 
     w_ti_per_cluster = []
-    # Calculating w_t_i per cluster.
+    # Calculating w_t_i for each cluster.
     for w_t_i_numerator in w_t_i_numerators:
         w_ti_per_cluster.append(w_t_i_numerator / w_t_i_denominator)  # denominator is not necessary here (argmax)
 
     # assert abs(sum(w_ti_per_cluster) - 1.0) < 0.005
-
     return w_ti_per_cluster
 
 
 def _e_step(all_articles: List[Article], clusters: List[Cluster]) -> List[List[float]]:
     """
-    By computing the w_t_i prob for each cluster, we get the new division of documents into clusters.
+    Performing the E step of the EM algorithm - Calculating w_t_i.
+    By computing the probability of w_t_i for each of the clusters, we get a new division of documents into clusters.
     """
 
     # Performing the E step on each one of the clusters.
@@ -352,7 +367,7 @@ def _e_step(all_articles: List[Article], clusters: List[Cluster]) -> List[List[f
 
     cluster_by_cluster_id = {cluster.cluster_id: cluster for cluster in clusters}
 
-    # Creating Cluster object for each of the 9 clusters.
+    # Updating the Cluster object for each of the 9 clusters.
     for cluster in clusters:
         cluster.update([])
     for cluster_id, articles in new_clusters.items():
@@ -388,6 +403,11 @@ def plot_graph(title, x_label, y_label, indexes, values, plot_color):
     """
     This function creates likelihood and perplexity graphs.
     """
+
+    # If the 'plots' directory does not exist, creating the 'plots' directory.
+    if not os.path.exists("./plots"):
+        os.mkdir("./plots")
+
     fig = pyplot.figure()
     ax = fig.add_subplot(111)
 
@@ -397,6 +417,7 @@ def plot_graph(title, x_label, y_label, indexes, values, plot_color):
 
     pyplot.plot(indexes, values, color=plot_color)
 
+    # Saving the graph to the 'plots' directory.
     plt.savefig("plots/" + title + ".png", dpi=192)
 
 
@@ -404,6 +425,11 @@ def plot_histogram(title, x_label, y_label, x, bins, color):
     """"
     This function creates 9 histograms of topics, one for each cluster.
     """
+
+    # If the 'plots' directory does not exist, creating the 'plots' directory.
+    if not os.path.exists("./plots"):
+        os.mkdir("./plots")
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
@@ -413,35 +439,34 @@ def plot_histogram(title, x_label, y_label, x, bins, color):
 
     x_coordinates = np.arange(len(bins))
     ax.bar(x_coordinates, x, align='center', color=color)
-
     ax.xaxis.set_major_locator(plt.FixedLocator(x_coordinates))
     ax.xaxis.set_major_formatter(plt.FixedFormatter(bins))
 
     # Make some labels.
     rects = ax.patches
     labels = x
-
     for rect, label in zip(rects, labels):
         height = rect.get_height()
         ax.text(rect.get_x() + rect.get_width() / 2, height + 0.01, label,
                 ha='center', va='bottom')
 
-    # plt.show()
+    # Saving the histogram to the 'plots' directory.
     plt.savefig("plots/" + title + ".png", dpi=192)
 
 
 def main():
+
     print(
         f"EPSILON_THRESHOLD = {EPSILON_THRESHOLD}\n"
         f"DEFAULT_K = {DEFAULT_K}\n"
         f"LAMBDA_PARAM = {LAMBDA_PARAM}\n"
         f"STOPPING_THRESHOLD = {STOPPING_THRESHOLD}\n")
 
+    # Extracting the 9 possible topics.
     topics = read_topics_file(topics_filename)
 
-    # Initializing 9 clusters.
-    articles, clusters, vocab_size, count_of_words = preprocessing_the_input_file(
-        development_set_filename, '<TRAIN')
+    # Preprocessing the input file (develop.txt) and initializing 9 new clusters.
+    articles, clusters, vocab_size, count_of_words = preprocessing_the_input_file(development_set_filename, '<TRAIN')
 
     num_epochs = 0
     prev_likelihood = None
@@ -456,14 +481,16 @@ def main():
         new_likelihood = calc_likelihood(articles, clusters)  # Calculating the new likelihood.
         new_perplexity = calc_perplexity(new_likelihood, count_of_words)  # Calculating the new perplexity.
 
-        # Save new likelihood and perplexity values.
+        # Save the new likelihood and perplexity values.
         likelihood_over_epochs.append(new_likelihood)
         perplexity_over_epochs.append(new_perplexity)
-        print(f"new_likelihood: {new_likelihood}")
+        print(f"Epoch: {num_epochs}\t-->\tLikelihood: {new_likelihood}")
 
         if prev_likelihood:
-            # assert new_likelihood >= prev_likelihood  # TODO: Remove assert
-            # assert new_perplexity <= prev_perplexity  # TODO: Remove assert
+
+            # assert new_likelihood >= prev_likelihood
+            # assert new_perplexity <= prev_perplexity
+
             # Stop the EM algorithm if the likelihood value converges.
             if new_likelihood - prev_likelihood <= STOPPING_THRESHOLD:
                 break
@@ -486,6 +513,7 @@ def main():
 
     """"" Confusion Matrix """""
 
+    # Creating the confusion matrix.
     rows = []
     for cluster in sorted(clusters, key=lambda cluster: len(cluster.articles), reverse=True):
         topics_counts = Counter()
@@ -514,16 +542,16 @@ def main():
 
     for idx, row in df.iterrows():
 
-        # Find cluster object
+        # Find the cluster object.
         cluster_id = row['cluster_id']
         cluster = cluster_by_cluster_id[cluster_id]
 
-        # Calc dominant topic
+        # Calculating the dominant topic for each cluster.
         dominant_topic_idx = row[topics].argmax()
         dominant_topic = row[topics].index[dominant_topic_idx]
         clusters_topics.append((cluster_id, dominant_topic))
 
-        # Calc accuracy
+        # Calculating the accuracy.
         for article in cluster.articles:
             total += 1
             if dominant_topic in article.gold_topics:
@@ -536,6 +564,7 @@ def main():
     colors = ['teal', 'purple', 'mediumaquamarine', 'rosybrown', 'cadetblue', 'mediumpurple', 'cornflowerblue',
               'darksalmon', 'palevioletred']
 
+    # Create 9 histograms of topics, one for each cluster.
     for idx, row in updated_df:
         cluster_id, cluster_topic = clusters_topics[idx - 1]
         plot_histogram(title=f"Cluster {cluster_id} - {cluster_topic}",
@@ -545,8 +574,8 @@ def main():
                        bins=topics,
                        color=colors[idx - 1])
 
-    assert total == len(articles)
-    print(f"Accuracy: {correct / total}")
+    # assert total == len(articles)
+    print(f"\nAccuracy: {correct / total}")
 
     print("Done")
 
