@@ -71,4 +71,4 @@ class LidstoneSmoothingModel(BaseSmoothingModel):
         num_of_unseen_events = self.vocab_size - len(self.unique_events)
         sum_of_probs += num_of_unseen_events * self.calc_prob("unseen-word")
 
-        print(f"sum_of_probs = {sum_of_probs} ; lambda = {self.lambda_param}")
+        assert abs(sum_of_probs - 1.0) < 0.005

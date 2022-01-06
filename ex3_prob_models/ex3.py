@@ -20,7 +20,8 @@ EPSILON_THRESHOLD = 0.00001
 DEFAULT_K = 10
 LAMBDA_PARAM = 0.968
 # TODO: Revert threshold
-STOPPING_THRESHOLD = 1e-6
+STOPPING_THRESHOLD = 0.0001
+# STOPPING_THRESHOLD = 1.0
 # STOPPING_THRESHOLD = 10000.0
 
 # Input arguments
@@ -112,7 +113,7 @@ class ClusterParams:
 
 def test_alpha_probabilities_sum_to_1(clusters: List[Cluster]):
     all_alphas_sum_after_normalization = sum([cluster.cluster_params.normalized_alpha_prior for cluster in clusters])
-    print(f"All alphas sum after normalization: {all_alphas_sum_after_normalization}")
+    # assert abs(all_alphas_sum_after_normalization - 1.0) < 0.0005
 
 
 def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]:
@@ -289,7 +290,7 @@ def calc_w_t_i_numerators_and_denominator(article: Article, all_clusters: List[C
         # If z_i - m < -k then according to formula 4, the numerator of w_t_i should be 0.
         if cluster_z_i - m < -k:
             w_t_i_numerator = 0
-        else:  # Otherwise, the numerator of w_t_i should be e^(z_i) − m.
+        else:  # Otherwise, the numerator of w_t_i should be e^(z_i − m).
             w_t_i_numerator = np.exp(cluster_z_i - m)
 
         w_t_i_numerators.append(w_t_i_numerator)
@@ -513,7 +514,7 @@ def main():
     confusion_matrix_columns.extend(topics)
     confusion_matrix_columns.append("cluster_size")
     df = pd.DataFrame(rows, columns=confusion_matrix_columns)
-    print(df.set_index("cluster_id"))
+    df.set_index("cluster_id").to_csv("confusion_matrix.csv")
 
     """"" Accuracy """""
 
