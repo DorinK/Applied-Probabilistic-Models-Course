@@ -1,9 +1,7 @@
 import math
-import sys
-from abc import abstractmethod, ABC
 from collections import defaultdict, Counter
 from dataclasses import dataclass
-from typing import List, Tuple, Optional, Dict
+from typing import List, Tuple, Optional
 
 import matplotlib.pyplot as plt
 from matplotlib import pyplot
@@ -62,15 +60,16 @@ class ClusterParams:
     non_normalized_alpha_prior: Optional[float] = None
     normalized_alpha_prior: Optional[float] = None
 
-    def update(self, articles: List[Article], num_of_articles: int, vocab_size: int, cluster_w_ti: List[float]):
+    def update(self, articles: List[Article], vocab_size: int, cluster_w_ti: List[float]):
         """
         Updating the parameters of the EM algorithm - alpha and P_i_k (P_i_k is updated by updating
         the lidstone model).
         """
         self.lidstone_model = self._calc_lidstone_model(articles, vocab_size, cluster_w_ti)
-        self.non_normalized_alpha_prior = self._calc_alpha_prior(cluster_w_ti, num_of_articles)
+        self.non_normalized_alpha_prior = self._calc_alpha_prior(cluster_w_ti, len(articles))
 
-    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int, cluster_w_ti: List[float]) -> LidstoneSmoothingModel:
+    def _calc_lidstone_model(self, articles: List[Article], vocab_size: int,
+                             cluster_w_ti: List[float]) -> LidstoneSmoothingModel:
         """
         Calculating the Lidstone model based on the training set and lambda value.
         """
@@ -128,7 +127,7 @@ def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]
         if not line:
             continue
         elif line.startswith(prefix):
-            article_id = line.split("\t")[1]
+            article_id = int(line.split("\t")[1])
             topics = line.split("\t")[2:]
         else:
             article_words = Counter()
@@ -176,7 +175,7 @@ def _filter_rare_words(articles: List[Article]) -> Tuple[List[Article], int, int
     return updated_articles, vocab_size, count_of_words
 
 
-def _create_clusters(articles: List[Article], num_of_articles: int, vocab_size: int) -> List[Cluster]:
+def _create_clusters(articles: List[Article], vocab_size: int) -> List[Cluster]:
     """
     Splitting the articles into 9 initial clusters in a modulo-9 manner, according to the ordinal number of the
     article and not its id.
@@ -201,7 +200,7 @@ def _create_clusters(articles: List[Article], num_of_articles: int, vocab_size: 
                 initial_w_ti.append(1.0)
             else:
                 initial_w_ti.append(0.0)
-        initial_params.update(articles, num_of_articles, vocab_size, initial_w_ti)
+        initial_params.update(articles, vocab_size, initial_w_ti)
         clusters_objs.append(Cluster(cluster_id, cluster_articles, initial_params))
 
     # Normalizing the alphas.
@@ -212,7 +211,7 @@ def _create_clusters(articles: List[Article], num_of_articles: int, vocab_size: 
     return clusters_objs
 
 
-def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Article], List[Cluster], int, int, int]:
+def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Article], List[Cluster], int, int]:
     """
     Reading the input file, dividing them into articles, filtering rare words from the corpus and
     creating 9 initial clusters.
@@ -228,14 +227,12 @@ def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Arti
 
     # Filtering rare words from the input corpus.
     filtered_articles, vocab_size, count_of_words = _filter_rare_words(articles)
-    # The total number of articles in the develop.txt file.
-    num_of_articles = len(filtered_articles)
 
     # Splitting the articles into 9 clusters.
-    clusters = _create_clusters(filtered_articles, num_of_articles, vocab_size)
+    clusters = _create_clusters(filtered_articles, vocab_size)
 
     # Returning the initialised 9 clusters + the total number of articles in the develop.txt file.
-    return filtered_articles, clusters, num_of_articles, vocab_size, count_of_words
+    return filtered_articles, clusters, vocab_size, count_of_words
 
 
 def read_topics_file(file_name: str) -> List[str]:
@@ -255,7 +252,6 @@ def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
 
     # TODO: Check if it is ok to run over all words in the document instead of all words in vocab.
     for word_k, word_k_count in article.words_counter.items():
-
         # The frequency of word k in document t.
         n_t_k = word_k_count
 
@@ -375,7 +371,7 @@ def _e_step(all_articles: List[Article], clusters: List[Cluster]) -> List[List[f
     return all_w_ti
 
 
-def _m_step(articles: List[Article], new_clusters: List[Cluster], num_of_articles: int, vocab_size: int, all_w_ti: List[List[float]]):
+def _m_step(articles: List[Article], new_clusters: List[Cluster], vocab_size: int, all_w_ti: List[List[float]]):
     """
     Performing the M step of the EM algorithm - updating the parameters.
     """
@@ -386,7 +382,7 @@ def _m_step(articles: List[Article], new_clusters: List[Cluster], num_of_article
     # Updating the parameters alpha_i and P_i_k.
     for cluster_idx, cluster in enumerate(new_clusters):
         cluster_w_ti = np.array(all_w_ti).T[cluster_idx]
-        cluster.cluster_params.update(articles, num_of_articles, vocab_size, cluster_w_ti)
+        cluster.cluster_params.update(articles, vocab_size, cluster_w_ti)
 
     # Normalizing the alphas.
     all_alphas_sum = sum([cluster_obj.cluster_params.non_normalized_alpha_prior for cluster_obj in new_clusters])
@@ -425,7 +421,7 @@ def plot_histogram(title, x_label, y_label, x, bins, color):
     ax.set_ylabel(y_label)
 
     x_coordinates = np.arange(len(bins))
-    ax.bar(x_coordinates, x, align='center',color=color)
+    ax.bar(x_coordinates, x, align='center', color=color)
 
     ax.xaxis.set_major_locator(plt.FixedLocator(x_coordinates))
     ax.xaxis.set_major_formatter(plt.FixedFormatter(bins))
@@ -443,8 +439,7 @@ def plot_histogram(title, x_label, y_label, x, bins, color):
     plt.savefig("plots/" + title + ".png", dpi=192)
 
 
-if __name__ == '__main__':
-
+def main():
     print(
         f"EPSILON_THRESHOLD = {EPSILON_THRESHOLD}\n"
         f"DEFAULT_K = {DEFAULT_K}\n"
@@ -454,7 +449,7 @@ if __name__ == '__main__':
     topics = read_topics_file(topics_filename)
 
     # Initializing 9 clusters.
-    articles, clusters, total_num_of_articles, vocab_size, count_of_words = preprocessing_the_input_file(
+    articles, clusters, vocab_size, count_of_words = preprocessing_the_input_file(
         development_set_filename, '<TRAIN')
 
     num_epochs = 0
@@ -487,7 +482,7 @@ if __name__ == '__main__':
         # TODO: Why likelihood is negative?
 
         all_w_ti = _e_step(articles, clusters)  # Performing the E step of the EM algorithm.
-        _m_step(articles, clusters, total_num_of_articles, vocab_size, all_w_ti)  # Performing the M step of the EM algorithm.
+        _m_step(articles, clusters, vocab_size, all_w_ti)  # Performing the M step of the EM algorithm.
 
     """"" Graphs """""
 
@@ -554,13 +549,17 @@ if __name__ == '__main__':
     for idx, row in updated_df:
         cluster_id, cluster_topic = clusters_topics[idx - 1]
         plot_histogram(title=f"Cluster {cluster_id} - {cluster_topic}",
-                                x_label="Topics",
-                                y_label="Number of Documents",
-                                x=row[topics].to_list(),
-                                bins=topics,
-                                color=colors[idx-1])
+                       x_label="Topics",
+                       y_label="Number of Documents",
+                       x=row[topics].to_list(),
+                       bins=topics,
+                       color=colors[idx - 1])
 
-    assert total == total_num_of_articles
+    assert total == len(articles)
     print(f"Accuracy: {correct / total}")
 
     print("Done")
+
+
+if __name__ == '__main__':
+    main()
