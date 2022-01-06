@@ -20,18 +20,20 @@ import pandas as pd
 # Parameters of the EM algorithm
 EPSILON_THRESHOLD = np.exp(-10)
 DEFAULT_K = 10
-LAMBDA_PARAM = 0.05
+LAMBDA_PARAM = 1.0
 # TODO: Revert threshold
-STOPPING_THRESHOLD = 0.05
+STOPPING_THRESHOLD = 1.0
 # STOPPING_THRESHOLD = 10000.0
 
 # Input arguments
 development_set_filename = "dataset/develop.txt"
+topics_filename = "dataset/topics.txt"
 
 
 @dataclass
 class Article:
     words_counter: Counter
+    gold_topics: List[str]
 
 
 @dataclass()
@@ -113,17 +115,21 @@ def _parse_input_file_to_articles(file: List[str], prefix: str) -> List[Article]
     Reading the articles from develop.txt and storing the words of each article in an Article object.
     """
     articles = []
+    topics = None
 
     for line in file:
-        if line.startswith(prefix) or not line:  # Ignoring header lines.
+        if not line:
             continue
+        elif line.startswith(prefix):
+            topics = line.split("\t")[2:]
         else:
             article_words = Counter()
             for word in line.split(' '):
                 article_words[word] += 1  # Storing the frequency of each word in the article.
 
             # Make each article as object of type Article.
-            article = Article(article_words)
+            assert topics is not None
+            article = Article(article_words, topics)
             articles.append(article)
 
     return articles
@@ -151,7 +157,7 @@ def _filter_rare_words(articles: List[Article]) -> Tuple[List[Article], int, int
         for word, word_count in article.words_counter.items():
             if word in common_words:
                 filtered_article_words[word] = word_count
-        updated_articles.append(Article(filtered_article_words))
+        updated_articles.append(Article(filtered_article_words, article.gold_topics))
 
     # Calculating the updated vocab size - 6800.
     vocab_size = len(common_words)
@@ -211,6 +217,13 @@ def preprocessing_the_input_file(file_name: str, prefix: str) -> Tuple[List[Clus
 
     # Returning the initialised 9 clusters + the total number of articles in the develop.txt file.
     return clusters, num_of_articles, vocab_size, count_of_words
+
+
+def read_topics_file(file_name: str) -> List[str]:
+    with open(file_name, 'r', encoding='utf-8') as f:
+        topics = [x[:-1] if x.endswith("\n") else x for x in f.readlines() if x is not "\n"]
+
+    return topics
 
 
 def calc_e_step_z_i(cluster: Cluster, article: Article) -> float:
@@ -405,6 +418,8 @@ def plot_histogram_of_topic(title, x_label, y_label, x, bins):
 
 if __name__ == '__main__':
 
+    topics = read_topics_file(topics_filename)
+
     # Initializing 9 clusters.
     clusters, total_num_of_articles, vocab_size, count_of_words = preprocessing_the_input_file(
         development_set_filename, '<TRAIN')
@@ -441,6 +456,8 @@ if __name__ == '__main__':
         _e_step(clusters)  # Performing the E step of the EM algorithm.
         _m_step(clusters, total_num_of_articles, vocab_size)  # Performing the M step of the EM algorithm.
 
+    ### Graphs ###
+
     # Plotting the graphs of the Log Likelihood and Mean Perplexity per Word over epochs.
     plot_graph(title='Log Likelihood over Epochs', x_label="Epoch", y_label="Log Likelihood * 1e-6",
                indexes=[i for i in range(0, num_epochs)], values=[val * 1e-6 for val in likelihood_over_epochs],
@@ -448,5 +465,58 @@ if __name__ == '__main__':
     plot_graph(title='Mean Perplexity per Word over Epochs', x_label="Epoch", y_label="Mean Perplexity per Word",
                indexes=[i for i in range(0, num_epochs)], values=perplexity_over_epochs,
                plot_color='indianred')
+
+    ### Confusion Matrix ###
+
+
+    # cluster_id    topic_1 topic_2 topic_3 cluster_size
+    # 1                100     0      0
+    # 2
+    rows = []
+    for cluster in sorted(clusters, key=lambda cluster: len(cluster.articles), reverse=True):
+        topics_counts = Counter()
+        for article in cluster.articles:
+            topics_counts.update(article.gold_topics)
+
+        row = [cluster.cluster_id]
+        for topic in topics:
+            row.append(topics_counts[topic])
+        row.append(len(cluster.articles))
+
+        rows.append(row)
+
+    confusion_matrix_columns = ["cluster_id"]
+    confusion_matrix_columns.extend(topics)
+    confusion_matrix_columns.append("cluster_size")
+    df = pd.DataFrame(rows, columns=confusion_matrix_columns)
+    print(df.set_index("cluster_id"))
+
+    ### Histograms ###
+
+    # for idx, row in df.iterrows():
+    #     plot_histogram_of_topic(f"Cluster: {row['cluster_id']}", "topics", "items", row[topics].to_list(), topics)
+
+    ### Accuracy ###
+
+    correct = 0
+    total = 0
+    cluster_by_cluster_id = {cluster.cluster_id: cluster for cluster in clusters}
+    for idx, row in df.iterrows():
+        # Find cluster object
+        cluster_id = row['cluster_id']
+        cluster = cluster_by_cluster_id[cluster_id]
+
+        # Calc dominant topic
+        dominant_topic_idx = row[topics].argmax()
+        dominant_topic = row[topics].index[dominant_topic_idx]
+
+        # Calc accuracy
+        for article in cluster.articles:
+            total += 1
+            if dominant_topic in article.gold_topics:
+                correct += 1
+
+    assert total == total_num_of_articles
+    print(f"Accuracy: {correct / total}")
 
     print("Done")
