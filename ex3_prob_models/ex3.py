@@ -18,7 +18,7 @@ import pandas as pd
 """"""""""""""""""""""""""""""""""""""
 
 # Parameters of the EM algorithm
-EPSILON_THRESHOLD = np.exp(-10)
+EPSILON_THRESHOLD = 0.01
 DEFAULT_K = 10
 LAMBDA_PARAM = 1.0
 # TODO: Revert threshold
@@ -417,6 +417,7 @@ def plot_histogram_of_topic(title, x_label, y_label, x, bins):
 
 
 if __name__ == '__main__':
+    print(f"EPSILON_THRESHOLD={EPSILON_THRESHOLD};DEFAULT_K={DEFAULT_K};LAMBDA_PARAM={LAMBDA_PARAM};STOPPING_THRESHOLD={STOPPING_THRESHOLD}")
 
     topics = read_topics_file(topics_filename)
 
@@ -468,10 +469,6 @@ if __name__ == '__main__':
 
     ### Confusion Matrix ###
 
-
-    # cluster_id    topic_1 topic_2 topic_3 cluster_size
-    # 1                100     0      0
-    # 2
     rows = []
     for cluster in sorted(clusters, key=lambda cluster: len(cluster.articles), reverse=True):
         topics_counts = Counter()
