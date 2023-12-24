@@ -1,4 +1,4 @@
-#Students	Dorin Keshales	Eran Hirsch	313298424	302620745
+#Students	Dorin Keshales	Eran Hirsch
 #Output1	ex2_files/dataset/develop.txt
 #Output2	ex2_files/dataset/test.txt
 #Output3	honduras
