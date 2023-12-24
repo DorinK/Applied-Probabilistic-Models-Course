@@ -3,10 +3,6 @@ import math
 from collections import defaultdict, Counter
 from typing import Tuple
 
-""""""""""""""""""""""""""""""""""""""
-#     Dorin Keshales    313298424
-#     Eran Hirsch       302620745
-""""""""""""""""""""""""""""""""""""""
 
 # The vocabulary size |V|
 V = 300000
