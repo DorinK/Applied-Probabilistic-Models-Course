@@ -5,10 +5,6 @@ from typing import List
 
 from language_models import LidstoneSmoothingModel, HeldoutSmoothingModel, V
 
-""""""""""""""""""""""""""""""""""""""
-#     Dorin Keshales    313298424
-#     Eran Hirsch       302620745
-""""""""""""""""""""""""""""""""""""""
 
 # Command-line arguments
 development_set_filename = sys.argv[1]
