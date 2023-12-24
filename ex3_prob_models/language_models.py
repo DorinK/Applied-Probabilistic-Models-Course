@@ -2,11 +2,6 @@ import math
 from abc import ABC, abstractmethod
 from collections import Counter
 
-""""""""""""""""""""""""""""""""""""""
-#     Dorin Keshales    313298424
-#     Eran Hirsch       302620745
-""""""""""""""""""""""""""""""""""""""
-
 
 class BaseSmoothingModel(ABC):
     """
