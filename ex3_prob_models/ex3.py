@@ -11,10 +11,6 @@ from language_models import LidstoneSmoothingModel
 import numpy as np
 import pandas as pd
 
-""""""""""""""""""""""""""""""""""""""
-#     Dorin Keshales    313298424
-#     Eran Hirsch       302620745
-""""""""""""""""""""""""""""""""""""""
 
 # Parameters of the EM algorithm
 EPSILON_THRESHOLD = 0.0001
